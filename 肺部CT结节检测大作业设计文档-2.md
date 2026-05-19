@@ -10,14 +10,26 @@
 
 ### 1.2 项目目标
 - **输入**：LUNA16公开数据集中的肺部CT体数据（.mhd/.raw格式）
-- **处理**：C++读取.mhd/.raw → 窗宽窗位调整 → 肺实质分割 → 频域带通滤波增强 → 候选结节检测 → 多特征假阳性削减
-- **输出**：带标注的2D切片序列、结节特征统计表、3D最大密度投影（MIP）视图
-- **约束**：不使用任何深度学习或预训练模型，所有检测逻辑由传统图像处理算法实现；数据预处理亦由纯C++完成，不依赖Python
+- **处理**：C++读取.mhd/.raw → 保留原始HU数据 → 窗宽窗位调整 → 肺实质分割 → 频域带通滤波增强 → 候选结节检测 → 多特征假阳性削减
+- **输出**：原始HU切片、带标注的2D切片序列、结节特征统计表、3D最大密度投影（MIP）视图
+- **约束**：不使用任何深度学习或预训练模型，所有检测逻辑由传统图像处理算法实现；原始体数据在内存中始终保留为16-bit/float，BMP仅作为展示输出，不作为唯一中间数据
 
 ### 1.3 核心创新点
-- **纯C++医学影像数据链路**：自主解析.mhd文本头与.raw二进制裸数据，完成HU值到BMP灰度序列的完整转换，体现对医学影像底层格式的掌握。
+- **纯C++医学影像数据链路**：自主解析.mhd文本头与.raw二进制裸数据，保留原始HU体数据，并生成窗宽窗位展示序列，体现对医学影像底层格式的掌握。
 - **频域带通滤波器设计**：针对肺结节物理尺寸（3 mm ~ 30 mm），在傅里叶频域构造高斯差带通滤波器，滤除低频背景与高频噪声，保留结节对应的中频能量带。直接对应课程第3章频域增强。
 - **全流程可视化**：从HU值映射、频谱图、肺掩膜到3D MIP，每一步均可视化，便于现场演示。
+
+### 1.4 分阶段完成边界
+考虑到作业时间和实现风险，项目按“先可演示、再增强、最后加分”的方式推进：
+
+| 阶段 | 完成标准 | 是否必须 |
+|---|---|---|
+| **最低完成线** | 能读取CT体数据，完成窗宽窗位、肺分割、单张候选检测和标注叠加展示 | 必须 |
+| **标准完成线** | 加入频域带通增强、圆形度/GLCM筛选、病例级结果统计 | 必须 |
+| **展示强化线** | MIP、伪彩色、消融对比、演示用 GUI | 建议 |
+| **可选加分线** | 多尺度 LoG、跨切片 3D 连接、更多病例对比 | 可选 |
+
+这样做的原则是：每完成一层，就已经是一份能交的作品；后面的 Stage 只是在同一条主线上不断增强，而不是前面不做完就无法收尾。
 
 ---
 
@@ -50,18 +62,22 @@ NDims = 3
 DimSize = 512 512 402          // 每例切片数不同
 ElementType = MET_SHORT        // 16位有符号整数
 ElementSpacing = 0.74 0.74 1.0 // 体素间距(mm)
+ElementByteOrderMSB = False     // 一般为小端
 ElementDataFile = xxx.raw      // 对应原始二进制数据文件
 BinaryData = True
+TransformMatrix = 1 0 0 0 1 0 0 0 1
+Offset = 0 0 0
 ```
 `.raw` 文件是**无头二进制裸数据**，按 `DimSize` 指定的维度顺序连续存储像素值。
 
-**本项目策略**：用**纯C++**解析.mhd头文件获取参数，直接`fread`读取.raw二进制数据到内存，逐切片做窗宽窗位映射后，用OpenCV `cv::imwrite` 保存为 `.bmp` 序列。BMP为无损无压缩格式，OpenCV原生完美支持，且避免了JPG压缩伪影。
+**本项目策略**：用**纯C++**解析.mhd头文件获取参数，直接`fread`读取.raw二进制数据到内存。程序内部保留原始HU矩阵，必要时再做窗宽窗位映射生成 8-bit 展示图，并用 OpenCV `cv::imwrite` 保存为 `.bmp`/`.png` 序列。这样既便于演示，也不会把后续算法锁死在 8-bit 数据上。
 
 ---
 
 ## 三、完整技术Pipeline
 
 ### Stage 0：数据IO与预处理（对应课程第1章：采样与量化）
+这一阶段的目标不是“先做完所有视觉效果”，而是先把数据链路跑通，确保原始 HU、显示图、元数据三者都能稳定对应。
 
 #### 3.1 C++ MHD头文件解析器
 `.mhd` 为文本文件，逐行读取键值对即可解析：
@@ -108,7 +124,7 @@ rawFile.read(buffer.data(), buffer.size());
 
 **字节序**：LUNA16默认小端（Little Endian），与x86/x64 CPU一致，直接`memcpy`即可。
 
-#### 3.3 窗宽窗位调整 + BMP输出
+#### 3.3 窗宽窗位调整 + 展示输出
 CT原始动态范围约 [-1000, +3000] HU，远超显示器256级灰度。通过**窗宽(WW)**与**窗位(WL)**进行灰度映射：
 
 - **肺窗参数**：`WL = -600`, `WW = 1500`（医学影像标准肺窗）
@@ -117,7 +133,7 @@ CT原始动态范围约 [-1000, +3000] HU，远超显示器256级灰度。通过
   G_out = clip( (HU - (WL - WW/2)) / WW × 255, 0, 255 )
   ```
 
-逐切片映射后，使用 `cv::imwrite("slice_xxx.bmp", slice_8bit)` 保存为BMP序列。同时输出 `meta.txt` 保留体素间距与窗宽窗位参数，供后续3D重建使用。
+逐切片映射后，使用 `cv::imwrite("slice_xxx.bmp", slice_8bit)` 或 `.png` 保存为展示序列。同时输出 `meta.txt` 保留体素间距、方向矩阵、窗宽窗位参数，供后续3D重建和坐标映射使用。注意：**算法流程继续使用原始 HU 数据，不以 8-bit 图代替原始体数据**。
 
 ```cpp
 cv::Mat windowing(const cv::Mat& src, float wl, float ww) {
@@ -175,6 +191,18 @@ H(u,v) = exp(-D²(u,v) / (2·σ_low²)) - exp(-D²(u,v) / (2·σ_high²))
 
 #### 2.3 C++实现流程
 ```cpp
+void fftShift(cv::Mat& complexI) {
+    cv::Mat tmp;
+    int cx = complexI.cols / 2;
+    int cy = complexI.rows / 2;
+    cv::Mat q0(complexI, cv::Rect(0, 0, cx, cy));
+    cv::Mat q1(complexI, cv::Rect(cx, 0, complexI.cols - cx, cy));
+    cv::Mat q2(complexI, cv::Rect(0, cy, cx, complexI.rows - cy));
+    cv::Mat q3(complexI, cv::Rect(cx, cy, complexI.cols - cx, complexI.rows - cy));
+    q0.copyTo(tmp);  q3.copyTo(q0);  tmp.copyTo(q3);
+    q1.copyTo(tmp);  q2.copyTo(q1);  tmp.copyTo(q2);
+}
+
 cv::Mat bandPassEnhance(cv::Mat src) {
     // 1. 扩展尺寸至最优DFT尺寸
     cv::Mat padded;
@@ -187,6 +215,7 @@ cv::Mat bandPassEnhance(cv::Mat src) {
     cv::Mat complexI;
     cv::merge(planes, 2, complexI);
     cv::dft(complexI, complexI);
+    fftShift(complexI);  // 将低频移动到中心，确保滤波器中心与频谱中心一致
 
     // 3. 构造高斯差带通滤波器
     cv::Mat filter(padded.size(), CV_32F);
@@ -206,18 +235,19 @@ cv::Mat bandPassEnhance(cv::Mat src) {
     planes[0] = planes[0].mul(filter);
     planes[1] = planes[1].mul(filter);
     cv::merge(planes, 2, complexI);
+    fftShift(complexI);  // 逆DFT前移回OpenCV默认频谱布局
 
     // 5. 逆DFT并取实部
-    cv::idft(complexI, complexI);
-    cv::split(complexI, planes);
     cv::Mat result;
-    cv::magnitude(planes[0], planes[1], result);
+    cv::idft(complexI, result, cv::DFT_REAL_OUTPUT | cv::DFT_SCALE);
     result = result(cv::Rect(0, 0, src.cols, src.rows));
     cv::normalize(result, result, 0, 255, cv::NORM_MINMAX);
     result.convertTo(result, CV_8U);
     return result;
 }
 ```
+
+如果实现时想进一步简化，也可以不做中心化，但滤波器必须按 OpenCV 默认的左上角直流点来构造。报告和代码应保持一致，避免出现“报告写中心频域、程序却按未中心化频谱滤波”的错位问题。
 
 #### 2.4 可视化与论证
 - **频谱图展示**：在报告中展示CT切片的中心化幅度谱，标注低频、中频、高频区域。
@@ -238,7 +268,7 @@ cv::Mat bandPassEnhance(cv::Mat src) {
 5. **形态学重建**：以亮斑中心为种子点，在原始肺ROI上做灰度形态学重建，精确提取结节边界。
 
 **简化版（适合作业时间）**：
-若LoG多尺度实现复杂，可改用**霍夫圆检测（`cv::HoughCircles`）**或**连通域筛选**：在带通增强图上做自适应阈值 → 找轮廓 → 用圆形度（Circularity = 4πA/P²）筛选。
+若 LoG 多尺度实现复杂，可改用**阈值 + 连通域 + 霍夫圆检测（`cv::HoughCircles`）**的组合：在带通增强图上做自适应阈值 → 找轮廓 → 用圆形度（Circularity = 4πA/P²）和面积范围筛选。这一版足够支撑课堂演示，也更容易稳住结果。
 
 **课程对应**：高斯滤波、拉普拉斯锐化、阈值分割、边缘检测、形态学重建。
 
@@ -277,6 +307,18 @@ ELSE 假阳性剔除
 ```
 
 **课程对应**：图像描述、统计特征、纹理特征、特征选择。
+
+#### 4.4 消融实验设计
+为了让报告更完整，也更好回答老师“这个结果是怎么一步步变好的”，建议做一个简单但清晰的消融对比：
+
+| 版本 | 处理链 | 目的 |
+|---|---|---|
+| **A** | 原始切片 + 阈值/轮廓 | 基线，观察最初假阳性情况 |
+| **B** | A + 肺实质分割 | 证明 ROI 缩小带来的收益 |
+| **C** | B + 频域带通增强 | 证明第 3 章内容的实际效果 |
+| **D** | C + 圆形度/GLCM 筛选 | 证明特征筛选能进一步削减假阳性 |
+
+对比时只需要选 1 到 2 个典型病例，把“候选数变化”“漏检/误检变化”“视觉效果变化”展示出来即可，不必追求大规模统计。
 
 ---
 
@@ -322,7 +364,7 @@ cv::Mat computeMIP(const std::vector<cv::Mat>& slices) {
 
 | 课程章节 | 知识点 | 本项目对应环节 | 证据形式 |
 |---|---|---|---|
-| **1. Introduction** | 采样、量化、CT成像、文件格式 | Stage 0：C++解析.mhd头文件、读取.raw裸数据、HU量化、BMP序列输出 | 报告理论章节 + 代码 |
+| **1. Introduction** | 采样、量化、CT成像、文件格式 | Stage 0：C++解析.mhd头文件、读取.raw裸数据、HU保留、展示序列输出 | 报告理论章节 + 代码 |
 | **2. Spatial Enhancement** | 灰度变换、直方图、空间滤波 | Stage 0窗宽窗位；Stage 3高斯/拉普拉斯滤波 | 公式+效果图 |
 | **3. Fourier Enhancement** | DFT、频域平滑/锐化 | Stage 2：高斯差带通滤波器设计 | **核心章节：频谱图、滤波器掩膜、对比实验** |
 | **4. Geometry Transform** | 旋转、缩放、插值 | Stage 0重采样；Stage 5.3 MIP多视角旋转 | 代码+3D视图 |
@@ -344,7 +386,7 @@ LungNoduleDetection/
 │   ├── mhd_reader.cpp/h      // .mhd头文件解析 + .raw二进制读取
 │   └── volume_loader.cpp     // 加载bmp切片序列，管理3D体数据
 ├── preprocessing/
-│   ├── windowing.cpp         // 窗宽窗位映射（HU -> 8bit）
+│   ├── windowing.cpp         // 窗宽窗位映射（HU -> 8-bit展示图）
 │   └── resample.cpp          // 3D重采样与插值
 ├── frequency/
 │   ├── dft_utils.cpp         // DFT/IDFT封装、频谱中心化
@@ -367,12 +409,14 @@ LungNoduleDetection/
 ```cpp
 class CTVolume {
 public:
-    std::vector<cv::Mat> slices;      // 各向同性重采样后的切片
+    std::vector<cv::Mat> huSlices;    // 原始HU切片，CV_16S或CV_32F，用于算法
+    std::vector<cv::Mat> displaySlices; // 8-bit窗宽窗位图，仅用于显示/保存
     float spacing[3];                 // 体素间距 (mm)
 
     bool loadFromRawMHD(const std::string& mhdPath, float wl, float ww);
-    bool loadFromBMPFolder(const std::string& folder);
-    cv::Mat getSlice(int z) const;
+    bool loadDisplayFolder(const std::string& folder);
+    cv::Mat getHUSlice(int z) const;
+    cv::Mat getDisplaySlice(int z) const;
     cv::Mat getMIP() const;           // 最大密度投影
     cv::Mat getBandPassEnhancedSlice(int z, float sLow, float sHigh) const;
 };
@@ -389,7 +433,7 @@ struct Nodule {
 
 ### 5.3 关键代码片段
 
-**A. C++ MHD解析 + RAW读取 + BMP输出（完整版）**
+**A. C++ MHD解析 + RAW读取 + HU保留 + 展示输出（示意版）**
 ```cpp
 #include <iostream>
 #include <fstream>
@@ -458,11 +502,12 @@ bool convertMHDToBMP(const std::string& mhdPath, const std::string& outFolder,
     std::vector<char> buffer(totalVoxels * bytesPerVoxel);
     rawFile.read(buffer.data(), buffer.size());
 
-    cv::Mat slice(height, width, cvType);
+    cv::Mat huSlice(height, width, cvType);
     for (int z = 0; z < slices; z++) {
         long long offset = 1LL * z * width * height * bytesPerVoxel;
-        std::memcpy(slice.data, buffer.data() + offset, width * height * bytesPerVoxel);
-        cv::Mat slice8bit = windowing(slice, wl, ww);
+        std::memcpy(huSlice.data, buffer.data() + offset, width * height * bytesPerVoxel);
+        // 正式工程中将 huSlice.clone() 存入 huSlices，供分割、滤波和特征计算使用。
+        cv::Mat slice8bit = windowing(huSlice, wl, ww);
         char fname[256];
         snprintf(fname, sizeof(fname), "%s/slice_%03d.bmp", outFolder.c_str(), z);
         cv::imwrite(fname, slice8bit);
@@ -487,6 +532,7 @@ ww " << ww << "
 
 **B. 频域带通滤波（完整版）**
 ```cpp
+// 复用前文 dft_utils 中的 fftShift，确保滤波器中心和频谱中心一致。
 cv::Mat frequencyBandPass(const cv::Mat& src, float sigmaLow, float sigmaHigh) {
     int m = cv::getOptimalDFTSize(src.rows);
     int n = cv::getOptimalDFTSize(src.cols);
@@ -497,6 +543,7 @@ cv::Mat frequencyBandPass(const cv::Mat& src, float sigmaLow, float sigmaHigh) {
     cv::Mat complexI;
     cv::merge(planes, 2, complexI);
     cv::dft(complexI, complexI);
+    fftShift(complexI);
 
     cv::Mat filter(padded.size(), CV_32F);
     cv::Point center(n/2, m/2);
@@ -513,21 +560,20 @@ cv::Mat frequencyBandPass(const cv::Mat& src, float sigmaLow, float sigmaHigh) {
     planes[0] = planes[0].mul(filter);
     planes[1] = planes[1].mul(filter);
     cv::merge(planes, 2, complexI);
+    fftShift(complexI);
 
-    cv::idft(complexI, complexI, cv::DFT_SCALE);
-    cv::split(complexI, planes);
-    cv::Mat mag;
-    cv::magnitude(planes[0], planes[1], mag);
-    mag = mag(cv::Rect(0, 0, src.cols, src.rows));
-    cv::normalize(mag, mag, 0, 255, cv::NORM_MINMAX);
-    mag.convertTo(mag, CV_8U);
-    return mag;
+    cv::Mat result;
+    cv::idft(complexI, result, cv::DFT_REAL_OUTPUT | cv::DFT_SCALE);
+    result = result(cv::Rect(0, 0, src.cols, src.rows));
+    cv::normalize(result, result, 0, 255, cv::NORM_MINMAX);
+    result.convertTo(result, CV_8U);
+    return result;
 }
 ```
 
 **C. GLCM特征提取**
 ```cpp
-void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homogeneity) {
+void computeGLCM(const cv::Mat& roi, double& contrast, double& energy, double& homogeneity) {
     cv::Mat quantized;
     roi.convertTo(quantized, CV_32F);
     quantized = quantized / 16.0f;
@@ -543,7 +589,9 @@ void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homo
             glcm.at<float>(p,q) += 1.0f;
         }
     }
-    glcm /= cv::sum(glcm)[0];
+    double total = cv::sum(glcm)[0];
+    if (total <= 0.0) return;
+    glcm /= total;
 
     contrast = 0; energy = 0; homogeneity = 0;
     for(int i=0; i<levels; i++) {
@@ -582,7 +630,7 @@ void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homo
 3. **第二章 数据集与C++数据IO**（3页）：
    - 2.1 LUNA16介绍与下载
    - 2.2 .mhd/.raw格式解析：文本头字段、二进制裸数据读取、字节序处理
-   - 2.3 C++窗宽窗位映射与BMP序列输出
+   - 2.3 C++窗宽窗位映射与展示序列输出
    - 2.4 元数据保留策略（meta.txt）
 4. **第三章 空间域增强与肺分割**（3页）：
    - 3.1 窗宽窗位映射（公式+肺窗/纵隔窗对比图）
@@ -597,7 +645,7 @@ void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homo
 6. **第五章 结节检测与分割**（2页）：LoG多尺度/自适应阈值、形态学重建、霍夫圆备选方案。
 7. **第六章 特征提取与假阳性削减**（2页）：几何特征公式、GLCM定义与实现、筛选规则表、削减前后对比。
 8. **第七章 3D可视化系统**（2页）：伪彩色映射原理、MIP投影公式、GUI交互设计、多视角旋转效果。
-9. **第八章 实验结果与分析**（2页）：选取2例典型LUNA16数据，展示完整Pipeline结果；与官方标注做定性对比；统计检测率与假阳性数。
+9. **第八章 实验结果与消融分析**（2页）：选取2例典型LUNA16数据，展示完整Pipeline结果；与官方标注做定性对比；用消融表展示各阶段对结果的贡献。
 10. **第九章 总结与展望**（1页）：传统方法优势与局限、课程学习收获。
 11. **参考文献**：引用LUNA16论文、冈萨雷斯教材、OpenCV文档。
 12. **附录A**：核心C++代码（MHD读取、带通滤波、GLCM、肺分割）。
@@ -608,7 +656,7 @@ void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homo
 | 时间 | 讲解词 | 屏幕操作 |
 |---|---|---|
 | 0:00-0:20 | "大家好，我们做的是基于传统图像处理的肺结节检测系统，数据集用LUNA16，全部代码纯C++实现。" | 展示项目标题页 |
-| 0:20-0:50 | "首先看数据IO：我们自主解析.mhd文本头，直接fread读取.raw二进制裸数据，经肺窗映射后输出BMP序列。" | 展示代码片段或meta.txt，说明C++底层读取 |
+| 0:20-0:50 | "首先看数据IO：我们自主解析.mhd文本头，直接fread读取.raw二进制裸数据，算法保留原始HU，同时生成肺窗展示序列。" | 展示代码片段或meta.txt，说明C++底层读取 |
 | 0:50-1:20 | "接下来是肺实质分割：用阈值+形态学开闭+连通域分析，去掉扫描床和胸壁。" | 点击'分割'按钮，左图原图，右图绿色肺轮廓 |
 | 1:20-2:00 | **（核心亮点）** "本项目的关键创新是频域带通滤波。结节尺寸3-30mm对应中频，我们在傅里叶域设计高斯差带通，滤除低频背景和高频噪声。" | 展示频谱图 → 展示滤波器掩膜 → 展示增强后结节对比度 |
 | 2:00-2:30 | "增强后做候选检测：用空间域拉普拉斯锐化+自适应阈值，提取亮斑，再用圆形度和GLCM纹理筛选假阳性。" | 点击'检测'，红圈自动标注结节；右侧弹出特征表格 |
@@ -618,7 +666,7 @@ void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homo
 
 **老师提问1分钟预案**：
 - Q: "为什么不用Python做预处理？" → A: "本项目要求纯C++实现以展示对底层文件格式和内存操作的掌握；.mhd是纯文本头，.raw是裸二进制，C++解析非常直接。"
-- Q: "BMP会不会丢失信息？" → A: "原始HU值是16bit，确实在窗宽窗位映射后量化为8bit BMP，但映射过程在C++中可控；同时我们保留meta.txt记录原始spacing和窗参，确保后续3D重建精度。"
+- Q: "BMP会不会丢失信息？" → A: "BMP/PNG只用于展示，算法内部仍保留原始16-bit HU体数据；窗宽窗位映射只是把医学影像压缩到显示器可看的灰度范围。"
 - Q: "带通滤波器参数怎么确定？" → A: "基于结节先验尺寸3-30mm，通过空间频率反比关系估算中频范围，最终通过实验在验证集上调优。"
 - Q: "检测精度如何？" → A: "传统方法以高灵敏度为目标，假阳性率较高，但本项目重点在于完整Pipeline与知识点覆盖，而非与SOTA比较。"
 
@@ -628,7 +676,7 @@ void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homo
 
 | 成员 | 负责模块 | 对应课程章节 | 交付物 |
 |---|---|---|---|
-| **同学A** | 1. C++数据IO（.mhd解析/.raw读取/窗宽窗位/BMP输出/meta.txt）<br>2. 肺实质分割（阈值+形态学+连通域）<br>3. 候选结节检测（LoG/阈值/轮廓提取）<br>4. GUI框架与现场演示程序整合 | 第1、2、6、7章 | `mhd_reader.cpp`, `windowing.cpp`, `lung_mask.cpp`, `nodule_candidate.cpp`, `main.cpp` |
+| **同学A** | 1. C++数据IO（.mhd解析/.raw读取/HU保留/窗宽窗位展示输出/meta.txt）<br>2. 肺实质分割（阈值+形态学+连通域）<br>3. 候选结节检测（LoG/阈值/轮廓提取）<br>4. GUI框架与现场演示程序整合 | 第1、2、6、7章 | `mhd_reader.cpp`, `windowing.cpp`, `lung_mask.cpp`, `nodule_candidate.cpp`, `main.cpp` |
 | **同学B** | 1. 频域带通滤波器设计与实现（DFT/滤波器/IDFT）<br>2. 特征提取（几何特征+GLCM自实现）<br>3. 假阳性削减规则引擎<br>4. 3D可视化（MIP投影+伪彩色+多视角）<br>5. 报告撰写与PPT制作 | 第3、4、5、8章 | `bandpass_filter.cpp`, `glcm.cpp`, `mip_renderer.cpp`, 报告全文 |
 
 **协作接口**：
@@ -647,20 +695,20 @@ void computeGLCM(const cv::Mat& roi, int& contrast, double& energy, double& homo
 | **频域带通效果不明显** | 核心亮点失败 | 准备Plan B：若带通效果不佳，改用**频域低通去噪对比实验**（同样覆盖第3章，实现更简单） |
 | **3D MIP性能不足** | 演示卡顿 | 预先计算MIP序列存为图片，演示时直接播放，而非实时计算 |
 | **结节检测假阳性过高** | 演示观感差 | 现场演示时选择**标注清晰、结节明显**的典型案例；报告里诚实分析假阳性来源 |
-| **6月5日 deadline 冲突** | 无法完成 | 按第十节时间表倒推，第14周必须完成代码 freeze，最后2周只做报告和PPT |
+| **提交日前时间不足** | 无法完成 | 按第十节时间表倒推，先锁定最低完成线，再把频域增强和消融对比作为优先加分项 |
 
 ---
 
 ## 十、下一步行动清单（建议时间表）
 
-假设当前为第12周（距离6月5日约3-4周）：
+假设当前为第12周（距离展示日约3-4周）：
 
-- [ ] **本周（Week 12）**：下载LUNA16 subset0；用C++跑通`.mhd`解析+`.raw`读取+窗宽窗位+BMP输出；验证1例数据能正常显示。
-- [ ] **下周（Week 13）**：同学A完成肺分割；同学B完成DFT带通滤波骨架+伪彩色映射。联调Stage 0~2。
-- [ ] **第14周**：同学A完成结节候选检测；同学B完成GLCM+几何特征+假阳性筛选。联调Stage 3~4，确定1~2例演示用例。
-- [ ] **第15周**：整合GUI与MIP可视化；优化参数；开始撰写报告（两人合写）。
-- [ ] **第16周初（6月1日~4日）**：报告定稿、代码打包、PPT制作、演示彩排（精确到秒）。
-- [ ] **6月5日**：提交PDF+代码+PPT，现场展示。
+- [ ] **本周（Week 12）**：下载 LUNA16 subset0；用 C++ 跑通 `.mhd` 解析 + `.raw` 读取 + 窗宽窗位 + BMP/PNG 展示输出；验证 1 例数据能正常显示。
+- [ ] **下周（Week 13）**：完成肺分割；完成 DFT 带通滤波骨架 + 伪彩色映射。联调 Stage 0~2。
+- [ ] **第14周**：完成结节候选检测；完成 GLCM + 几何特征 + 假阳性筛选。联调 Stage 3~4，确定 1~2 例演示用例。
+- [ ] **第15周**：整合 GUI 与 MIP 可视化；优化参数；开始撰写报告（两人合写）。
+- [ ] **第16周初**：报告定稿、代码打包、PPT 制作、演示彩排（精确到秒）。
+- [ ] **提交日**：提交 PDF + 代码 + PPT，现场展示。
 
 ---
 
