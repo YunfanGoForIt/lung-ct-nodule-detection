@@ -1,2 +1,5 @@
 *.pdf
 .DS_Store
+build/
+build-cmake/
+data/
