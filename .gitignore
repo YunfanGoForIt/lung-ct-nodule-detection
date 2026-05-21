@@ -3,3 +3,5 @@
 build/
 build-cmake/
 data/
+__pycache__/
+*.pyc

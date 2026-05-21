@@ -9,7 +9,11 @@ namespace {
 
 void printUsage(const char* argv0) {
     std::cerr << "Usage: " << argv0 << " <input.mhd> <output_dir> [--wl -600] [--ww 1500] "
-              << "[--sigma-low 30] [--sigma-high 5] [--min-diameter 3] [--max-diameter 30]\n";
+              << "[--sigma-low 30] [--sigma-high 5] [--min-diameter 3] [--max-diameter 30] "
+              << "[--min-circularity 0.45] [--final-min-mean-hu -1000] "
+              << "[--final-max-mean-hu 1000] [--final-min-std-hu 0] [--final-max-std-hu 1000] "
+              << "[--final-max-glcm-contrast 1000] [--final-min-glcm-homogeneity 0] "
+              << "[--final-max-slice-count 1000000] [--max-final-candidates 0]\n";
 }
 
 float parseFloat(const char* value, const std::string& name) {
@@ -19,6 +23,15 @@ float parseFloat(const char* value, const std::string& name) {
         throw std::runtime_error("invalid value for " + name + ": " + value);
     }
     return parsed;
+}
+
+int parseInt(const char* value, const std::string& name) {
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (end == value || *end != '\0') {
+        throw std::runtime_error("invalid value for " + name + ": " + value);
+    }
+    return static_cast<int>(parsed);
 }
 
 } // namespace
@@ -48,6 +61,24 @@ int main(int argc, char** argv) {
                 options.minDiameterMm = parseFloat(argv[++i], arg);
             } else if (arg == "--max-diameter" && i + 1 < argc) {
                 options.maxDiameterMm = parseFloat(argv[++i], arg);
+            } else if (arg == "--min-circularity" && i + 1 < argc) {
+                options.minCircularity = parseFloat(argv[++i], arg);
+            } else if (arg == "--final-min-mean-hu" && i + 1 < argc) {
+                options.finalMinMeanHU = parseFloat(argv[++i], arg);
+            } else if (arg == "--final-max-mean-hu" && i + 1 < argc) {
+                options.finalMaxMeanHU = parseFloat(argv[++i], arg);
+            } else if (arg == "--final-min-std-hu" && i + 1 < argc) {
+                options.finalMinStdHU = parseFloat(argv[++i], arg);
+            } else if (arg == "--final-max-std-hu" && i + 1 < argc) {
+                options.finalMaxStdHU = parseFloat(argv[++i], arg);
+            } else if (arg == "--final-max-glcm-contrast" && i + 1 < argc) {
+                options.finalMaxGLCMContrast = parseFloat(argv[++i], arg);
+            } else if (arg == "--final-min-glcm-homogeneity" && i + 1 < argc) {
+                options.finalMinGLCMHomogeneity = parseFloat(argv[++i], arg);
+            } else if (arg == "--final-max-slice-count" && i + 1 < argc) {
+                options.finalMaxSliceCount = parseInt(argv[++i], arg);
+            } else if (arg == "--max-final-candidates" && i + 1 < argc) {
+                options.maxFinalCandidates = parseInt(argv[++i], arg);
             } else if (arg == "--no-debug-images") {
                 options.writeDebugImages = false;
             } else {

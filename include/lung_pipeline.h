@@ -58,6 +58,14 @@ struct PipelineOptions {
     float minDiameterMm = 3.0f;
     float maxDiameterMm = 30.0f;
     float minCircularity = 0.45f;
+    float finalMinMeanHU = -1000.0f;
+    float finalMaxMeanHU = 1000.0f;
+    float finalMinStdHU = 0.0f;
+    float finalMaxStdHU = 1000.0f;
+    float finalMaxGLCMContrast = 1000.0f;
+    float finalMinGLCMHomogeneity = 0.0f;
+    int finalMaxSliceCount = 1000000;
+    int maxFinalCandidates = 0;
     bool writeDebugImages = true;
 };
 

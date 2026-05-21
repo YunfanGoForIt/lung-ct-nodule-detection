@@ -816,6 +816,15 @@ static void writeMeta(const fs::path& outDir, const Volume& volume, const Pipeli
     meta << "window_width " << options.windowWidth << "\n";
     meta << "bandpass_sigma_low " << options.sigmaLow << "\n";
     meta << "bandpass_sigma_high " << options.sigmaHigh << "\n";
+    meta << "min_circularity " << options.minCircularity << "\n";
+    meta << "final_min_mean_hu " << options.finalMinMeanHU << "\n";
+    meta << "final_max_mean_hu " << options.finalMaxMeanHU << "\n";
+    meta << "final_min_std_hu " << options.finalMinStdHU << "\n";
+    meta << "final_max_std_hu " << options.finalMaxStdHU << "\n";
+    meta << "final_max_glcm_contrast " << options.finalMaxGLCMContrast << "\n";
+    meta << "final_min_glcm_homogeneity " << options.finalMinGLCMHomogeneity << "\n";
+    meta << "final_max_slice_count " << options.finalMaxSliceCount << "\n";
+    meta << "max_final_candidates " << options.maxFinalCandidates << "\n";
 }
 
 static void writeFeatures(const fs::path& outDir, const std::vector<Nodule>& nodules) {
@@ -837,6 +846,33 @@ static std::string sliceName(int z, const std::string& suffix) {
     std::ostringstream oss;
     oss << "slice_" << std::setw(3) << std::setfill('0') << z << suffix;
     return oss.str();
+}
+
+static float noduleRankScore(const Nodule& nodule) {
+    return 2.0f * nodule.diameterMm
+         + 3.0f * nodule.glcmHomogeneity
+         - 0.02f * nodule.stdHU
+         - 0.2f * nodule.glcmContrast;
+}
+
+static std::vector<Nodule> filterFinalNodules(std::vector<Nodule> nodules, const PipelineOptions& options) {
+    nodules.erase(std::remove_if(nodules.begin(), nodules.end(), [&](const Nodule& nodule) {
+        return nodule.meanHU < options.finalMinMeanHU
+            || nodule.meanHU > options.finalMaxMeanHU
+            || nodule.stdHU < options.finalMinStdHU
+            || nodule.stdHU > options.finalMaxStdHU
+            || nodule.glcmContrast > options.finalMaxGLCMContrast
+            || nodule.glcmHomogeneity < options.finalMinGLCMHomogeneity
+            || nodule.sliceCount > options.finalMaxSliceCount;
+    }), nodules.end());
+
+    std::sort(nodules.begin(), nodules.end(), [](const Nodule& a, const Nodule& b) {
+        return noduleRankScore(a) > noduleRankScore(b);
+    });
+    if (options.maxFinalCandidates > 0 && nodules.size() > static_cast<std::size_t>(options.maxFinalCandidates)) {
+        nodules.resize(static_cast<std::size_t>(options.maxFinalCandidates));
+    }
+    return nodules;
 }
 
 } // namespace
@@ -979,7 +1015,7 @@ PipelineResult runPipeline(const PipelineOptions& options) {
         masks.push_back(std::move(mask));
     }
 
-    result.nodules = groupCandidates(allComponents, volume.spacingZ);
+    result.nodules = filterFinalNodules(groupCandidates(allComponents, volume.spacingZ), options);
     writeFeatures(options.outputDir, result.nodules);
     writePPM(fs::path(options.outputDir) / "mip.ppm", computeMIP(volume, options.windowLevel, options.windowWidth));
 

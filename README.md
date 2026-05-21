@@ -56,6 +56,51 @@ make test
 ./build/lung_pipeline build/synthetic_case/synthetic.mhd build/cli_run_tuned --sigma-low 12 --sigma-high 2.5 --max-diameter 14
 ```
 
+## 使用 LUNA16 标注验证
+
+官方 `annotations.csv` 下载后可放在 `data/luna16_zenodo/csv/annotations.csv`。运行 Pipeline 后，用下列工具将程序输出的体素坐标转换为 `.mhd` 世界坐标，并与官方结节中心坐标按毫米距离匹配：
+
+```bash
+./tools/validate_luna_annotations.py \
+  --mhd path/to/case.mhd \
+  --features output/case_result/features.csv \
+  --annotations data/luna16_zenodo/csv/annotations.csv \
+  --out output/case_result/annotation_validation.csv
+```
+
+验证结果会同时生成 `annotation_validation.csv` 和 `annotation_validation_summary.txt`，其中 `strict_hit_distance_le_radius` 表示候选点到标注中心的距离是否落在该标注结节半径内。
+
+对整个 subset 批量运行并汇总：
+
+```bash
+./tools/run_subset_batch_validation.py \
+  --subset-dir data/luna16_subset8_download/subset8 \
+  --annotations data/luna16_zenodo/csv/annotations.csv \
+  --output-root data/subset8_batch_validation \
+  --pipeline ./build/lung_pipeline
+```
+
+批量脚本默认使用 `--no-debug-images`，避免为每例 CT 写出完整切片序列；输出根目录中会生成 `subset8_validation_summary.csv` 和 `subset8_validation_report.txt`。
+
+当前 subset8 训练集调参后采用的最终过滤参数如下；它保持测试集严格召回不变，同时显著减少候选数量：
+
+```bash
+./tools/run_subset_batch_validation.py \
+  --subset-dir data/luna16_subset8_download/subset8 \
+  --annotations data/luna16_zenodo/csv/annotations.csv \
+  --output-root data/subset8_batch_validation_tuned \
+  --pipeline ./build/lung_pipeline \
+  --pipeline-arg=--min-circularity --pipeline-arg=0.46 \
+  --pipeline-arg=--final-min-mean-hu --pipeline-arg=-410 \
+  --pipeline-arg=--final-max-mean-hu --pipeline-arg=60 \
+  --pipeline-arg=--final-min-std-hu --pipeline-arg=25 \
+  --pipeline-arg=--final-max-std-hu --pipeline-arg=210 \
+  --pipeline-arg=--final-max-glcm-contrast --pipeline-arg=3.3 \
+  --pipeline-arg=--final-min-glcm-homogeneity --pipeline-arg=0.45 \
+  --pipeline-arg=--final-max-slice-count --pipeline-arg=18 \
+  --pipeline-arg=--max-final-candidates --pipeline-arg=180
+```
+
 ## 打开图形界面
 
 先确认已经有输出目录，例如端到端测试生成的 `build/e2e_output/`，然后运行：
