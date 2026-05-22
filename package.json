@@ -1,0 +1,10 @@
+{
+  "name": "lung-ct-nodule-detection-presentation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Presentation generation utilities for the lung CT nodule detection coursework project.",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}
