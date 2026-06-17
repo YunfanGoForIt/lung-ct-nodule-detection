@@ -3,9 +3,11 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -pedantic
 CPPFLAGS ?= -Iinclude
 
 SRC := src/lung_pipeline.cpp
+HEADERS := include/lung_pipeline.h
 APP_SRC := src/main.cpp
 TEST_SRC := tests/test_pipeline.cpp
 VIEWER_SRC := src/viewer.cpp
+VIEWER_HEADERS := include/viewer.h
 VIEWER_APP_SRC := src/viewer_main.cpp
 VIEWER_TEST_SRC := tests/test_viewer.cpp
 OPENCV_FLAGS := $(shell /opt/homebrew/bin/pkg-config --cflags --libs opencv4 2>/dev/null)
@@ -17,16 +19,16 @@ all: build/lung_pipeline build/lung_viewer
 build:
 	mkdir -p build
 
-build/lung_pipeline: $(SRC) $(APP_SRC) | build
+build/lung_pipeline: $(SRC) $(APP_SRC) $(HEADERS) | build
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(SRC) $(APP_SRC) -o $@
 
-build/test_pipeline: $(SRC) $(TEST_SRC) | build
+build/test_pipeline: $(SRC) $(TEST_SRC) $(HEADERS) | build
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(SRC) $(TEST_SRC) -o $@
 
-build/lung_viewer: $(VIEWER_SRC) $(VIEWER_APP_SRC) | build
+build/lung_viewer: $(VIEWER_SRC) $(VIEWER_APP_SRC) $(VIEWER_HEADERS) | build
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(VIEWER_SRC) $(VIEWER_APP_SRC) $(OPENCV_FLAGS) -o $@
 
-build/test_viewer: $(VIEWER_SRC) $(VIEWER_TEST_SRC) | build
+build/test_viewer: $(VIEWER_SRC) $(VIEWER_TEST_SRC) $(VIEWER_HEADERS) | build
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(VIEWER_SRC) $(VIEWER_TEST_SRC) -o $@
 
 test: build/test_pipeline build/test_viewer

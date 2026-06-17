@@ -74,6 +74,8 @@ struct Component {
     float glcmContrast = 0.0f;
     float glcmEnergy = 0.0f;
     float glcmHomogeneity = 0.0f;
+    float minBoundaryDistanceMm = 0.0f;
+    float aspectRatio = 1.0f;
     std::vector<int> indices;
 };
 
@@ -557,6 +559,62 @@ static void computeGLCM(const GrayImage& image, const Component& component, floa
     }
 }
 
+static std::vector<float> distanceToMaskBoundary(const std::vector<std::uint8_t>& mask,
+                                                 int width,
+                                                 int height,
+                                                 float spacingX,
+                                                 float spacingY) {
+    std::vector<float> distance(mask.size(), std::numeric_limits<float>::infinity());
+    std::queue<int> q;
+    const float spacing = std::max(0.001f, (spacingX + spacingY) * 0.5f);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const int idx = y * width + x;
+            if (!mask[static_cast<std::size_t>(idx)]) {
+                continue;
+            }
+            bool boundary = x == 0 || y == 0 || x == width - 1 || y == height - 1;
+            const int dx[4] = {1, 0, -1, 0};
+            const int dy[4] = {0, 1, 0, -1};
+            for (int k = 0; k < 4 && !boundary; ++k) {
+                const int nx = x + dx[k];
+                const int ny = y + dy[k];
+                if (!mask[static_cast<std::size_t>(ny) * width + nx]) {
+                    boundary = true;
+                }
+            }
+            if (boundary) {
+                distance[static_cast<std::size_t>(idx)] = 0.0f;
+                q.push(idx);
+            }
+        }
+    }
+
+    const int dx[4] = {1, 0, -1, 0};
+    const int dy[4] = {0, 1, 0, -1};
+    while (!q.empty()) {
+        const int idx = q.front();
+        q.pop();
+        const int x = idx % width;
+        const int y = idx / width;
+        const float nextDistance = distance[static_cast<std::size_t>(idx)] + spacing;
+        for (int k = 0; k < 4; ++k) {
+            const int nx = x + dx[k];
+            const int ny = y + dy[k];
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                continue;
+            }
+            const int next = ny * width + nx;
+            if (!mask[static_cast<std::size_t>(next)] || distance[static_cast<std::size_t>(next)] <= nextDistance) {
+                continue;
+            }
+            distance[static_cast<std::size_t>(next)] = nextDistance;
+            q.push(next);
+        }
+    }
+    return distance;
+}
+
 static std::vector<Component> detectCandidates(const FloatImage& hu,
                                                const GrayImage& windowed,
                                                const GrayImage& enhanced,
@@ -574,12 +632,17 @@ static std::vector<Component> detectCandidates(const FloatImage& hu,
     int threshold = 160;
     if (!maskedValues.empty()) {
         std::sort(maskedValues.begin(), maskedValues.end());
-        threshold = std::max(100, maskedValues[static_cast<std::size_t>(maskedValues.size() * 85 / 100)]);
+        const float percentile = std::clamp(options.candidateBandpassPercentile, 0.0f, 100.0f);
+        const std::size_t last = maskedValues.size() - 1;
+        const std::size_t index = static_cast<std::size_t>(
+            std::lround(static_cast<float>(last) * percentile / 100.0f));
+        threshold = std::max(100, maskedValues[index]);
     }
 
     std::vector<std::uint8_t> seed(lungMask.size(), 0);
     for (std::size_t i = 0; i < seed.size(); ++i) {
-        const bool softTissue = hu.pixels[i] > -500.0f && hu.pixels[i] < 250.0f;
+        const bool softTissue = hu.pixels[i] > options.candidateMinSeedHU
+            && hu.pixels[i] < options.candidateMaxSeedHU;
         const bool bandpassBlob = enhanced.pixels[i] >= threshold;
         seed[i] = lungMask[i] && softTissue && bandpassBlob ? 1 : 0;
     }
@@ -587,6 +650,7 @@ static std::vector<Component> detectCandidates(const FloatImage& hu,
 
     auto components = connectedComponents(seed, hu.width, hu.height);
     std::vector<Component> candidates;
+    const std::vector<float> boundaryDistance = distanceToMaskBoundary(lungMask, hu.width, hu.height, spacingX, spacingY);
     const float minArea = kPi * std::pow((options.minDiameterMm * 0.5f) / std::max(0.001f, (spacingX + spacingY) * 0.5f), 2.0f) * 0.35f;
     const float maxArea = kPi * std::pow((options.maxDiameterMm * 0.5f) / std::max(0.001f, (spacingX + spacingY) * 0.5f), 2.0f) * 1.8f;
 
@@ -636,6 +700,16 @@ static std::vector<Component> detectCandidates(const FloatImage& hu,
         component.centerX = static_cast<float>(sumX / component.area);
         component.centerY = static_cast<float>(sumY / component.area);
         component.diameterMm = 2.0f * std::sqrt(static_cast<float>(component.area) * spacingX * spacingY / kPi);
+        const float boxWidthMm = static_cast<float>(component.maxX - component.minX + 1) * spacingX;
+        const float boxHeightMm = static_cast<float>(component.maxY - component.minY + 1) * spacingY;
+        component.aspectRatio = std::max(boxWidthMm, boxHeightMm) / std::max(0.001f, std::min(boxWidthMm, boxHeightMm));
+        component.minBoundaryDistanceMm = std::numeric_limits<float>::infinity();
+        for (int idx : pixels) {
+            component.minBoundaryDistanceMm = std::min(component.minBoundaryDistanceMm, boundaryDistance[static_cast<std::size_t>(idx)]);
+        }
+        if (!std::isfinite(component.minBoundaryDistanceMm)) {
+            component.minBoundaryDistanceMm = 0.0f;
+        }
         component.circularity = component.perimeter > 0
             ? 4.0f * kPi * static_cast<float>(component.area) / static_cast<float>(component.perimeter * component.perimeter)
             : 0.0f;
@@ -647,7 +721,7 @@ static std::vector<Component> detectCandidates(const FloatImage& hu,
         if (component.circularity >= options.minCircularity
             && component.diameterMm >= options.minDiameterMm
             && component.diameterMm <= options.maxDiameterMm
-            && component.meanHU > -650.0f) {
+            && component.meanHU > options.candidateMinMeanHU) {
             candidates.push_back(std::move(component));
         }
     }
@@ -699,6 +773,12 @@ static std::vector<Nodule> groupCandidates(const std::vector<Component>& compone
             nodule.glcmContrast += c.glcmContrast;
             nodule.glcmEnergy += c.glcmEnergy;
             nodule.glcmHomogeneity += c.glcmHomogeneity;
+            if (nodule.minBoundaryDistanceMm == 0.0f) {
+                nodule.minBoundaryDistanceMm = c.minBoundaryDistanceMm;
+            } else {
+                nodule.minBoundaryDistanceMm = std::min(nodule.minBoundaryDistanceMm, c.minBoundaryDistanceMm);
+            }
+            nodule.maxAspectRatio = std::max(nodule.maxAspectRatio, c.aspectRatio);
         }
         if (weightSum > 0.0f) {
             nodule.centerX /= weightSum;
@@ -816,6 +896,10 @@ static void writeMeta(const fs::path& outDir, const Volume& volume, const Pipeli
     meta << "window_width " << options.windowWidth << "\n";
     meta << "bandpass_sigma_low " << options.sigmaLow << "\n";
     meta << "bandpass_sigma_high " << options.sigmaHigh << "\n";
+    meta << "candidate_bandpass_percentile " << options.candidateBandpassPercentile << "\n";
+    meta << "candidate_min_seed_hu " << options.candidateMinSeedHU << "\n";
+    meta << "candidate_max_seed_hu " << options.candidateMaxSeedHU << "\n";
+    meta << "candidate_min_mean_hu " << options.candidateMinMeanHU << "\n";
     meta << "min_circularity " << options.minCircularity << "\n";
     meta << "final_min_mean_hu " << options.finalMinMeanHU << "\n";
     meta << "final_max_mean_hu " << options.finalMaxMeanHU << "\n";
@@ -823,13 +907,24 @@ static void writeMeta(const fs::path& outDir, const Volume& volume, const Pipeli
     meta << "final_max_std_hu " << options.finalMaxStdHU << "\n";
     meta << "final_max_glcm_contrast " << options.finalMaxGLCMContrast << "\n";
     meta << "final_min_glcm_homogeneity " << options.finalMinGLCMHomogeneity << "\n";
+    meta << "final_min_boundary_distance_mm " << options.finalMinBoundaryDistanceMm << "\n";
+    meta << "final_max_aspect_ratio " << options.finalMaxAspectRatio << "\n";
+    meta << "final_min_slice_count " << options.finalMinSliceCount << "\n";
+    meta << "final_min_slice_count_exception_diameter_mm "
+         << options.finalMinSliceCountExceptionDiameterMm << "\n";
     meta << "final_max_slice_count " << options.finalMaxSliceCount << "\n";
     meta << "max_final_candidates " << options.maxFinalCandidates << "\n";
+    meta << "rank_diameter_reward_cap_mm " << options.rankDiameterRewardCapMm << "\n";
+    meta << "rank_slice_count_penalty " << options.rankSliceCountPenalty << "\n";
+    meta << "rank_score_policy "
+         << (options.useLearnedRankScore ? "learned_grid0256_d1c1m1s1x0h2z0_mt280" : "legacy") << "\n";
+    meta << "learned_score_quantile " << options.learnedScoreQuantile << "\n";
+    meta << "learned_top_k " << options.learnedTopK << "\n";
 }
 
 static void writeFeatures(const fs::path& outDir, const std::vector<Nodule>& nodules) {
     std::ofstream csv(outDir / "features.csv");
-    csv << "id,center_x,center_y,center_z,diameter_mm,circularity,mean_hu,std_hu,glcm_contrast,glcm_energy,glcm_homogeneity,slice_count\n";
+    csv << "id,center_x,center_y,center_z,diameter_mm,circularity,mean_hu,std_hu,glcm_contrast,glcm_energy,glcm_homogeneity,min_boundary_distance_mm,max_aspect_ratio,slice_count\n";
     for (std::size_t i = 0; i < nodules.size(); ++i) {
         const Nodule& n = nodules[i];
         csv << i + 1 << ","
@@ -838,6 +933,7 @@ static void writeFeatures(const fs::path& outDir, const std::vector<Nodule>& nod
             << n.diameterMm << "," << n.circularity << ","
             << n.meanHU << "," << n.stdHU << ","
             << n.glcmContrast << "," << n.glcmEnergy << "," << n.glcmHomogeneity << ","
+            << n.minBoundaryDistanceMm << "," << n.maxAspectRatio << ","
             << n.sliceCount << "\n";
     }
 }
@@ -848,29 +944,82 @@ static std::string sliceName(int z, const std::string& suffix) {
     return oss.str();
 }
 
-static float noduleRankScore(const Nodule& nodule) {
-    return 2.0f * nodule.diameterMm
+static float legacyNoduleRankScore(const Nodule& nodule, const PipelineOptions& options) {
+    const float diameterReward = options.rankDiameterRewardCapMm > 0.0f
+        ? std::min(nodule.diameterMm, options.rankDiameterRewardCapMm)
+        : nodule.diameterMm;
+    const float singleSlicePenalty = nodule.sliceCount <= 1 ? options.rankSliceCountPenalty : 0.0f;
+    return 2.0f * diameterReward
          + 3.0f * nodule.glcmHomogeneity
          - 0.02f * nodule.stdHU
-         - 0.2f * nodule.glcmContrast;
+         - 0.2f * nodule.glcmContrast
+         - singleSlicePenalty;
 }
 
-static std::vector<Nodule> filterFinalNodules(std::vector<Nodule> nodules, const PipelineOptions& options) {
+static float learnedNoduleRankScore(const Nodule& nodule) {
+    const float diameter = std::clamp(nodule.diameterMm, 0.0f, 20.0f) / 20.0f;
+    const float circularity = std::clamp(nodule.circularity, 0.0f, 1.0f);
+    const float meanCloseness = 1.0f - std::min(std::abs(nodule.meanHU - (-280.0f)) / 320.0f, 1.0f);
+    const float stdHU = std::clamp(nodule.stdHU, 0.0f, 260.0f) / 260.0f;
+    const float homogeneity = std::clamp(nodule.glcmHomogeneity, 0.0f, 1.0f);
+    return diameter + circularity + meanCloseness - stdHU + 2.0f * homogeneity;
+}
+
+static std::vector<Nodule> filterFinalNodules(std::vector<Nodule> nodules,
+                                              const PipelineOptions& options) {
     nodules.erase(std::remove_if(nodules.begin(), nodules.end(), [&](const Nodule& nodule) {
+        const bool tooFewSlices = options.finalMinSliceCount > 0
+            && nodule.sliceCount < options.finalMinSliceCount
+            && (options.finalMinSliceCountExceptionDiameterMm <= 0.0f
+                || nodule.diameterMm < options.finalMinSliceCountExceptionDiameterMm);
+        const bool tooCloseToBoundary = options.finalMinBoundaryDistanceMm > 0.0f
+            && nodule.minBoundaryDistanceMm < options.finalMinBoundaryDistanceMm;
         return nodule.meanHU < options.finalMinMeanHU
             || nodule.meanHU > options.finalMaxMeanHU
             || nodule.stdHU < options.finalMinStdHU
             || nodule.stdHU > options.finalMaxStdHU
             || nodule.glcmContrast > options.finalMaxGLCMContrast
             || nodule.glcmHomogeneity < options.finalMinGLCMHomogeneity
+            || tooCloseToBoundary
+            || nodule.maxAspectRatio > options.finalMaxAspectRatio
+            || tooFewSlices
             || nodule.sliceCount > options.finalMaxSliceCount;
     }), nodules.end());
 
-    std::sort(nodules.begin(), nodules.end(), [](const Nodule& a, const Nodule& b) {
-        return noduleRankScore(a) > noduleRankScore(b);
+    std::sort(nodules.begin(), nodules.end(), [&](const Nodule& a, const Nodule& b) {
+        return legacyNoduleRankScore(a, options) > legacyNoduleRankScore(b, options);
     });
     if (options.maxFinalCandidates > 0 && nodules.size() > static_cast<std::size_t>(options.maxFinalCandidates)) {
         nodules.resize(static_cast<std::size_t>(options.maxFinalCandidates));
+    }
+
+    if (!options.useLearnedRankScore) {
+        return nodules;
+    }
+
+    std::stable_sort(nodules.begin(), nodules.end(), [](const Nodule& a, const Nodule& b) {
+        return learnedNoduleRankScore(a) > learnedNoduleRankScore(b);
+    });
+
+    if (options.learnedScoreQuantile >= 0.0f && !nodules.empty()) {
+        std::vector<float> scores;
+        scores.reserve(nodules.size());
+        for (const Nodule& nodule : nodules) {
+            scores.push_back(learnedNoduleRankScore(nodule));
+        }
+        std::sort(scores.begin(), scores.end());
+        const float quantile = std::clamp(options.learnedScoreQuantile, 0.0f, 1.0f);
+        const std::size_t index = std::min(
+            scores.size() - 1,
+            static_cast<std::size_t>(std::floor(static_cast<float>(scores.size() - 1) * quantile)));
+        const float threshold = scores[index];
+        nodules.erase(std::remove_if(nodules.begin(), nodules.end(), [&](const Nodule& nodule) {
+            return learnedNoduleRankScore(nodule) < threshold;
+        }), nodules.end());
+    }
+
+    if (options.learnedTopK > 0 && nodules.size() > static_cast<std::size_t>(options.learnedTopK)) {
+        nodules.resize(static_cast<std::size_t>(options.learnedTopK));
     }
     return nodules;
 }

@@ -6,10 +6,49 @@
 - Stage1：阈值、形态学开闭、连通域、空洞填充生成肺实质掩膜。
 - Stage2：二维 FFT + 高斯差频域带通滤波增强中尺度结节结构。
 - Stage3：在肺 ROI 内做候选亮斑检测、连通域提取与面积范围筛选。
-- Stage4：计算几何、灰度统计、GLCM 纹理特征，并用圆形度/直径/HU 规则削减假阳性。
+- Stage4：计算几何、灰度统计、GLCM 纹理特征，并用调参后的 HU/纹理规则与学习型候选评分削减假阳性。
 - Stage5：输出带标注 2D 切片、肺掩膜、带通增强图、伪彩色 MIP 与 `features.csv`。
 
 本机已安装 OpenCV 与 CMake。核心 Pipeline 仍采用轻量 C++17 实现，保证端到端测试不依赖真实 LUNA16 数据；交互浏览界面使用 OpenCV HighGUI，图像输出使用标准 PGM/PPM，可被 OpenCV 直接读取。
+
+## 当前默认优化方案
+
+当前命令行程序已经默认使用最终推荐的优化方案。直接运行 `./build/lung_pipeline input.mhd output_dir` 时，会启用：
+
+```bash
+--min-circularity 0.46
+--final-min-mean-hu -410
+--final-max-mean-hu 60
+--final-min-std-hu 25
+--final-max-std-hu 210
+--final-max-glcm-contrast 3.3
+--final-min-glcm-homogeneity 0.45
+--final-max-slice-count 18
+--max-final-candidates 180
+--learned-score-quantile 0.50
+```
+
+这个方案可以理解为两步：
+
+1. 先用调参后的 HU、纹理、层数等规则过滤掉明显不像结节的候选。
+2. 再给剩下的候选打一个学习型分数，每例 CT 只保留分数排在前 50% 的候选。
+
+学习型分数不是深度学习模型，而是一个轻量线性评分：它综合候选大小、圆形度、平均 HU 是否接近结节经验值、内部灰度是否稳定、纹理是否均匀。实验中它能把血管截面、肺门结构、边界亮点等假阳性更多地排到后面，同时尽量保留真实结节。
+
+在 LUNA16 subset8 全量 88 例上的结果对比：
+
+| 方案 | 严格召回 | 宽松召回 | 候选数 | 严格假阳性 |
+|---|---:|---:|---:|---:|
+| 调参基线 | 69/118 | 73/118 | 12311 | 7903 |
+| 默认最终方案 | 68/118 | 71/118 | 6233 | 3965 |
+
+也就是说，默认最终方案用 1 个严格命中和 2 个宽松命中的代价，换来了约 49.4% 的候选数减少和约 49.8% 的严格假阳性减少。详细探索过程见 `优化探索报告.md`。
+
+如果需要复现旧的非学习型排序，可以显式传入：
+
+```bash
+--use-legacy-rank-score
+```
 
 ## 数据获取与下载避坑
 
@@ -142,7 +181,7 @@ make test
 ./build/lung_pipeline path/to/case.mhd output/case_result
 ```
 
-可选参数：
+这条命令默认会使用“当前默认优化方案”中的最终参数。常用可选参数：
 
 ```bash
 --wl -600 --ww 1500 --sigma-low 30 --sigma-high 5 --min-diameter 3 --max-diameter 30
@@ -151,7 +190,13 @@ make test
 小尺寸合成数据可使用更小的带通尺度：
 
 ```bash
-./build/lung_pipeline build/synthetic_case/synthetic.mhd build/cli_run_tuned --sigma-low 12 --sigma-high 2.5 --max-diameter 14
+./build/lung_pipeline build/synthetic_case/synthetic.mhd build/cli_run_tuned \
+  --sigma-low 12 --sigma-high 2.5 --max-diameter 14 \
+  --final-min-mean-hu -1000 --final-max-mean-hu 1000 \
+  --final-min-std-hu 0 --final-max-std-hu 1000 \
+  --final-max-glcm-contrast 1000 --final-min-glcm-homogeneity 0 \
+  --final-max-slice-count 1000000 --max-final-candidates 0 \
+  --use-legacy-rank-score
 ```
 
 ## 使用 LUNA16 标注验证
@@ -180,23 +225,14 @@ make test
 
 批量脚本默认使用 `--no-debug-images`，避免为每例 CT 写出完整切片序列；输出根目录中会生成 `subset8_validation_summary.csv` 和 `subset8_validation_report.txt`。
 
-当前 subset8 训练集调参后采用的最终过滤参数如下；它保持测试集严格召回不变，同时显著减少候选数量：
+因为 `lung_pipeline` 现在已经默认采用最终优化方案，批量验证时通常不需要再手动传一长串 `--pipeline-arg`。如果希望在输出目录名中明确标出这是最终方案，可以这样跑：
 
 ```bash
 ./tools/run_subset_batch_validation.py \
   --subset-dir data/luna16_subset8_download/subset8 \
   --annotations data/luna16_zenodo/csv/annotations.csv \
-  --output-root data/subset8_batch_validation_tuned \
-  --pipeline ./build/lung_pipeline \
-  --pipeline-arg=--min-circularity --pipeline-arg=0.46 \
-  --pipeline-arg=--final-min-mean-hu --pipeline-arg=-410 \
-  --pipeline-arg=--final-max-mean-hu --pipeline-arg=60 \
-  --pipeline-arg=--final-min-std-hu --pipeline-arg=25 \
-  --pipeline-arg=--final-max-std-hu --pipeline-arg=210 \
-  --pipeline-arg=--final-max-glcm-contrast --pipeline-arg=3.3 \
-  --pipeline-arg=--final-min-glcm-homogeneity --pipeline-arg=0.45 \
-  --pipeline-arg=--final-max-slice-count --pipeline-arg=18 \
-  --pipeline-arg=--max-final-candidates --pipeline-arg=180
+  --output-root data/subset8_batch_validation_final_default \
+  --pipeline ./build/lung_pipeline
 ```
 
 ## 打开图形界面
