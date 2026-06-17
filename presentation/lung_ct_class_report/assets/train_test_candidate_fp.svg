@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560">
+<rect width="100%" height="100%" fill="#fdfae7"/>
+<text x="110" y="48" font-family="Space Grotesk, Arial" font-size="30" font-weight="700" fill="#111">调参前后：候选数与假阳性下降</text>
+<line x1="110" y1="470" x2="940" y2="470" stroke="rgba(30,43,250,.25)"/>
+<line x1="110" y1="470.0" x2="940" y2="470.0" stroke="rgba(30,43,250,.10)"/>
+<text x="96" y="475.0" text-anchor="end" font-family="Inter, Arial" font-size="14" fill="#6b6b6b">0</text>
+<line x1="110" y1="394.0" x2="940" y2="394.0" stroke="rgba(30,43,250,.10)"/>
+<text x="96" y="399.0" text-anchor="end" font-family="Inter, Arial" font-size="14" fill="#6b6b6b">63</text>
+<line x1="110" y1="318.0" x2="940" y2="318.0" stroke="rgba(30,43,250,.10)"/>
+<text x="96" y="323.0" text-anchor="end" font-family="Inter, Arial" font-size="14" fill="#6b6b6b">126</text>
+<line x1="110" y1="242.0" x2="940" y2="242.0" stroke="rgba(30,43,250,.10)"/>
+<text x="96" y="247.0" text-anchor="end" font-family="Inter, Arial" font-size="14" fill="#6b6b6b">189</text>
+<line x1="110" y1="166.0" x2="940" y2="166.0" stroke="rgba(30,43,250,.10)"/>
+<text x="96" y="171.0" text-anchor="end" font-family="Inter, Arial" font-size="14" fill="#6b6b6b">252</text>
+<line x1="110" y1="90.0" x2="940" y2="90.0" stroke="rgba(30,43,250,.10)"/>
+<text x="96" y="95.0" text-anchor="end" font-family="Inter, Arial" font-size="14" fill="#6b6b6b">315</text>
+<rect x="154.8" y="148.0" width="54.0" height="322.0" rx="8" fill="rgba(30,43,250,.22)"/>
+<text x="181.8" y="138.0" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">267.2</text>
+<rect x="218.8" y="299.1" width="54.0" height="170.9" rx="8" fill="#1e2bfa"/>
+<text x="245.7" y="289.1" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">141.8</text>
+<text x="213.8" y="518" text-anchor="middle" font-family="Inter, Arial" font-size="18" font-weight="600" fill="#111">Train 候选/例</text>
+<rect x="362.3" y="237.0" width="54.0" height="233.0" rx="8" fill="rgba(30,43,250,.22)"/>
+<text x="389.3" y="227.0" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">193.3</text>
+<rect x="426.2" y="358.5" width="54.0" height="111.5" rx="8" fill="#1e2bfa"/>
+<text x="453.2" y="348.5" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">92.5</text>
+<text x="421.2" y="518" text-anchor="middle" font-family="Inter, Arial" font-size="18" font-weight="600" fill="#111">Train FP/例</text>
+<rect x="569.8" y="153.0" width="54.0" height="317.0" rx="8" fill="rgba(30,43,250,.22)"/>
+<text x="596.8" y="143.0" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">263</text>
+<rect x="633.8" y="306.8" width="54.0" height="163.2" rx="8" fill="#1e2bfa"/>
+<text x="660.7" y="296.8" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">135.4</text>
+<text x="628.8" y="518" text-anchor="middle" font-family="Inter, Arial" font-size="18" font-weight="600" fill="#111">Test 候选/例</text>
+<rect x="777.3" y="262.7" width="54.0" height="207.3" rx="8" fill="rgba(30,43,250,.22)"/>
+<text x="804.3" y="252.7" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">172</text>
+<rect x="841.2" y="369.5" width="54.0" height="100.5" rx="8" fill="#1e2bfa"/>
+<text x="868.2" y="359.5" text-anchor="middle" font-family="Space Grotesk, Arial" font-size="18" font-weight="700" fill="#111">83.4</text>
+<text x="836.2" y="518" text-anchor="middle" font-family="Inter, Arial" font-size="18" font-weight="600" fill="#111">Test FP/例</text>
+<rect x="680" y="28" width="18" height="18" rx="3" fill="rgba(30,43,250,.22)"/><text x="708" y="43" font-family="Inter, Arial" font-size="15" fill="#6b6b6b">Baseline</text>
+<rect x="810" y="28" width="18" height="18" rx="3" fill="#1e2bfa"/><text x="838" y="43" font-family="Inter, Arial" font-size="15" fill="#6b6b6b">Tuned</text>
+</svg>

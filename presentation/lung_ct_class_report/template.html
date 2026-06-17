@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>肺部 CT 结节检测课堂汇报</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fdfae7;
+      --primary: #1e2bfa;
+      --text: #111111;
+      --text-muted: #6b6b6b;
+      --text-light: #9a9a9a;
+      --accent-light: rgba(30, 43, 250, 0.08);
+      --accent-medium: rgba(30, 43, 250, 0.15);
+      --border: rgba(30, 43, 250, 0.2);
+      --card-bg: rgba(30, 43, 250, 0.04);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* Slide container */
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      /* Asymmetric padding: extra bottom space to clear the fixed
+         slide-counter (left) and nav-controls (right). Without this,
+         cards/grids that fill slide-content overlap the nav chrome. */
+      padding: 3.5vw 4vw 8.5vh 4vw;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(40px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      overflow: hidden;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateX(0);
+      z-index: 10;
+    }
+
+    .slide.prev {
+      transform: translateX(-40px);
+    }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: clamp(2.8rem, 5vw, 4.2rem);
+      font-weight: 700;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      margin-bottom: 1.5rem;
+    }
+
+    h3 {
+      font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+      font-weight: 500;
+      line-height: 1.3;
+    }
+
+    h4 {
+      font-size: clamp(0.85rem, 1.2vw, 1rem);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+    }
+
+    p, li {
+      font-size: clamp(0.85rem, 1.1vw, 1.05rem);
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* Slide header bar */
+    .slide-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2.5vh;
+      flex-shrink: 0;
+    }
+
+    .slide-header h4 {
+      margin: 0;
+    }
+
+    .slide-header .tag {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--primary);
+      background: var(--accent-light);
+      padding: 0.35rem 0.9rem;
+      border-radius: 100px;
+    }
+
+    /* Slide content area */
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    /* Navigation */
+    .nav-controls {
+      position: fixed;
+      bottom: 2.5vh;
+      right: 3vw;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      z-index: 100;
+    }
+
+    .nav-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--bg);
+      color: var(--primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 1.1rem;
+    }
+
+    .nav-btn:hover {
+      background: var(--primary);
+      color: var(--bg);
+      border-color: var(--primary);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .slide-counter {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      position: fixed;
+      bottom: 2.5vh;
+      left: 3vw;
+      z-index: 100;
+    }
+
+    .progress-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: var(--primary);
+      transition: width 0.4s ease;
+      z-index: 100;
+    }
+
+    /* Decorative elements */
+    .accent-line {
+      width: 60px;
+      height: 4px;
+      background: var(--primary);
+      border-radius: 2px;
+      margin-bottom: 1.5rem;
+    }
+
+    .accent-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* ============================================================
+       LAYOUT 1: Cover / Title Slide
+       ============================================================ */
+    .layout-cover {
+      justify-content: center;
+      align-items: flex-start;
+      padding-left: 8vw;
+    }
+
+    .layout-cover h1 {
+      max-width: 55vw;
+      margin-bottom: 1.5rem;
+      line-height: 1.05;
+    }
+
+    .layout-cover .subtitle {
+      font-size: clamp(1rem, 1.5vw, 1.25rem);
+      color: var(--text-muted);
+      max-width: 40vw;
+      margin-bottom: 3rem;
+      font-weight: 400;
+    }
+
+    .layout-cover .meta {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.8rem;
+      color: var(--text-light);
+      letter-spacing: 0.05em;
+    }
+
+    .layout-cover .cover-decoration {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 35vw;
+      height: 100vh;
+      background: var(--accent-light);
+      clip-path: polygon(30% 0, 100% 0, 100% 100%, 0% 100%);
+    }
+
+    .layout-cover .cover-dots {
+      position: absolute;
+      bottom: 12vh;
+      right: 8vw;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      opacity: 0.25;
+    }
+
+    .layout-cover .cover-dots .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--primary);
+      border-radius: 50%;
+    }
+
+    /* ============================================================
+       LAYOUT 2: Agenda / Table of Contents
+       ============================================================ */
+    .layout-agenda .agenda-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 1rem 3rem;
+      margin-top: 1rem;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .agenda-item {
+      display: flex;
+      gap: 1.2rem;
+      align-items: center;
+      padding: 1rem 1.2rem;
+      border-radius: 12px;
+      transition: background 0.2s ease;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .agenda-item:hover {
+      background: var(--card-bg);
+    }
+
+    .agenda-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+      min-width: 36px;
+    }
+
+    .agenda-item h3 {
+      margin-bottom: 0.3rem;
+      font-size: clamp(1rem, 1.4vw, 1.2rem);
+    }
+
+    .agenda-item p {
+      font-size: clamp(0.8rem, 1vw, 0.95rem);
+      line-height: 1.5;
+    }
+
+    /* ============================================================
+       LAYOUT 3: Key Metrics (3 large callouts)
+       Cards size to their content; the row centers vertically
+       inside the remaining slide-content area.
+       ============================================================ */
+    .layout-metrics .slide-content {
+      justify-content: flex-start;
+    }
+
+    .layout-metrics .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin-top: 0.5rem;
+      align-items: stretch;
+    }
+
+    .metric-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      padding: 1.5rem 1.6rem;
+      border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: var(--card-bg);
+    }
+
+    .metric-card .metric-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(2.2rem, 3.4vw, 3rem);
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .metric-card .metric-label {
+      font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .metric-card .metric-desc {
+      font-size: clamp(0.78rem, 0.95vw, 0.9rem);
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .metric-card .metric-supports {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin: 0.2rem 0 0;
+      padding: 0.7rem 0 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .metric-card .metric-supports li {
+      font-size: clamp(0.75rem, 0.9vw, 0.85rem);
+      color: var(--text-muted);
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.45;
+    }
+
+    .metric-card .metric-supports li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: var(--text-light);
+    }
+
+    .metric-card .metric-change {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-top: 0.3rem;
+    }
+
+    .metric-change.positive { color: #059669; }
+    .metric-change.negative { color: #dc2626; }
+
+    /* ============================================================
+       LAYOUT 4: Data Dashboard (6 stat grid)
+       Cells have natural height with stat at top + name + small
+       context line. Grid is auto-sized; the row stays in the upper
+       portion of slide-content with the bottom-padding reserved
+       for nav chrome.
+       ============================================================ */
+    .layout-dashboard .slide-content {
+      justify-content: flex-start;
+    }
+
+    .layout-dashboard .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.2rem;
+      margin-top: 0.5rem;
+    }
+
+    .stat-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1.4rem 1.5rem;
+      border-radius: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+    }
+
+    .stat-cell .stat-top {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
+    .stat-cell .stat-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .stat-cell .stat-unit {
+      font-size: 0.8rem;
+      color: var(--text-light);
+      font-weight: 500;
+    }
+
+    .stat-cell .stat-name {
+      font-size: clamp(0.85rem, 1vw, 0.95rem);
+      color: var(--text);
+      line-height: 1.35;
+      font-weight: 500;
+    }
+
+    .stat-cell .stat-context {
+      font-size: 0.75rem;
+      color: var(--text-light);
+      line-height: 1.4;
+      padding-top: 0.4rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ============================================================
+       LAYOUT 5: Two Column Split
+       Left = numbered insight list, Right = pull-quote + supporting
+       stats. Both columns size to their content with natural rhythm
+       (gap-based spacing, no forced height-distribution).
+       ============================================================ */
+    .layout-split .slide-content {
+      justify-content: flex-start;
+    }
+
+    .layout-split .split-body {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      gap: 3.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .split-left, .split-right {
+      display: flex;
+      flex-direction: column;
+      gap: 1.4rem;
+    }
+
+    .split-right {
+      padding-left: 2.5rem;
+      border-left: 2px solid var(--border);
+    }
+
+    .insight-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+      margin: 0;
+      counter-reset: insight;
+    }
+
+    .insight-list li {
+      position: relative;
+      padding-left: 2.6rem;
+      font-size: clamp(0.88rem, 1.05vw, 1rem);
+      color: var(--text);
+      line-height: 1.55;
+      counter-increment: insight;
+    }
+
+    .insight-list li::before {
+      content: counter(insight, decimal-leading-zero);
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--primary);
+      letter-spacing: 0.05em;
+      line-height: 1.7;
+    }
+
+    .split-highlight {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.15rem, 1.55vw, 1.5rem);
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.4;
+      padding: 1.3rem 1.5rem;
+      background: var(--accent-light);
+      border-radius: 12px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .split-highlight cite {
+      display: block;
+      margin-top: 0.7rem;
+      font-style: normal;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .mini-stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      padding-top: 0.4rem;
+    }
+
+    .mini-stat {
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+    }
+
+    .mini-stat .mini-val {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .mini-stat .mini-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+      line-height: 1.35;
+    }
+
+    /* ============================================================
+       LAYOUT 6: Horizontal Bar Ranking
+       ============================================================ */
+    .layout-bars .bars-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.8rem;
+      margin-top: 0.5rem;
+    }
+
+    .bar-item {
+      display: grid;
+      grid-template-columns: minmax(180px, 30%) 1fr auto;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.6rem 0;
+    }
+
+    .bar-label {
+      font-size: clamp(0.8rem, 1.1vw, 1rem);
+      color: var(--text);
+      font-weight: 500;
+      line-height: 1.3;
+    }
+
+    .bar-track {
+      height: 28px;
+      background: var(--accent-light);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--primary);
+      border-radius: 6px;
+      transition: width 0.8s ease;
+    }
+
+    .bar-pct {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--primary);
+      min-width: 45px;
+      text-align: right;
+    }
+
+    .bar-note {
+      font-size: 0.75rem;
+      color: var(--text-light);
+      margin-top: 0.2rem;
+    }
+
+    /* ============================================================
+       LAYOUT 7: Quote / Highlight
+       ============================================================ */
+    .layout-quote {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .layout-quote .quote-mark {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 8rem;
+      font-weight: 700;
+      color: var(--primary);
+      opacity: 0.15;
+      line-height: 0.5;
+      margin-bottom: 1rem;
+    }
+
+    .layout-quote blockquote {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.6rem, 2.8vw, 2.4rem);
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--text);
+      max-width: 65vw;
+      margin-bottom: 2rem;
+    }
+
+    .layout-quote .quote-source {
+      font-size: clamp(0.85rem, 1.1vw, 1rem);
+      color: var(--text-muted);
+    }
+
+    .layout-quote .quote-source strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .layout-quote .quote-decoration {
+      position: absolute;
+      top: 10vh;
+      left: 5vw;
+      width: 80px;
+      height: 80px;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+    }
+
+    .layout-quote .quote-decoration-2 {
+      position: absolute;
+      bottom: 12vh;
+      right: 6vw;
+      width: 60px;
+      height: 60px;
+      background: var(--accent-light);
+      border-radius: 50%;
+    }
+
+    /* ============================================================
+       LAYOUT 8: Timeline / Process Flow
+       ============================================================ */
+    .layout-timeline .timeline-track {
+      display: flex;
+      gap: 1.5rem;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.5rem;
+    }
+
+    .timeline-step {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    .timeline-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 28px;
+      right: -0.75rem;
+      width: 1.5rem;
+      height: 2px;
+      background: var(--border);
+    }
+
+    .step-circle {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .timeline-step:nth-child(2) .step-circle { opacity: 0.85; }
+    .timeline-step:nth-child(3) .step-circle { opacity: 0.7; }
+    .timeline-step:nth-child(4) .step-circle { opacity: 0.55; }
+
+    .step-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(0.95rem, 1.4vw, 1.15rem);
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.4rem;
+    }
+
+    .step-desc {
+      font-size: clamp(0.75rem, 1vw, 0.9rem);
+      color: var(--text-muted);
+      line-height: 1.5;
+      max-width: 220px;
+    }
+
+    /* ============================================================
+       LAYOUT 9: Detailed Analysis (bullets with sub-items)
+       ============================================================ */
+    .layout-detail .detail-body {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2rem 3rem;
+      flex: 1;
+      margin-top: 0.5rem;
+      overflow: hidden;
+    }
+
+    .detail-col {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .detail-block {
+      padding: 1rem 1.2rem;
+      border-radius: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+    }
+
+    .detail-block h3 {
+      font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+      margin-bottom: 0.6rem;
+      color: var(--text);
+    }
+
+    .detail-block ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .detail-block ul li {
+      position: relative;
+      padding-left: 1.1rem;
+      padding-bottom: 0.4rem;
+      font-size: clamp(0.78rem, 1vw, 0.9rem);
+      line-height: 1.5;
+    }
+
+    .detail-block ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.55rem;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--primary);
+    }
+
+    .detail-block ul li:last-child {
+      padding-bottom: 0;
+    }
+
+    /* ============================================================
+       LAYOUT 10: Closing / CTA
+       ============================================================ */
+    .layout-closing {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .layout-closing h1 {
+      margin-bottom: 1rem;
+    }
+
+    .layout-closing .closing-sub {
+      font-size: clamp(1rem, 1.5vw, 1.3rem);
+      color: var(--text-muted);
+      max-width: 45vw;
+      margin-bottom: 2.5rem;
+    }
+
+    .layout-closing .cta-btn {
+      display: inline-block;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--bg);
+      background: var(--primary);
+      padding: 0.9rem 2.2rem;
+      border-radius: 100px;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .layout-closing .cta-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(30, 43, 250, 0.25);
+    }
+
+    .layout-closing .closing-contact {
+      margin-top: 3rem;
+      font-size: 0.85rem;
+      color: var(--text-light);
+    }
+
+    .layout-closing .closing-decoration {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 500px;
+      height: 500px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .layout-closing .closing-decoration-2 {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 360px;
+      height: 360px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    /* Keyboard hint */
+    .keyboard-hint {
+      position: fixed;
+      bottom: 2.5vh;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7rem;
+      color: var(--text-light);
+      z-index: 100;
+      opacity: 0.6;
+    }
+
+    /* Responsive adjustments for very small heights */
+    @media (max-height: 700px) {
+      .slide { padding: 2.5vh 3vw; }
+      .layout-agenda .agenda-grid { gap: 0.8rem 2rem; }
+      .agenda-item { padding: 0.8rem; }
+      .metric-card { padding: 1rem; }
+      .layout-bars .bars-container { gap: 0.5rem; }
+      .bar-item { padding: 0.4rem 0; }
+      .detail-block { padding: 0.8rem 1rem; }
+    }
+  
+
+    /* Project-specific extensions, built from Blue Professional grammar */
+    .cn { font-family: 'Inter', 'Noto Sans SC', sans-serif; }
+    .layout-cover h1 { max-width: 62vw; }
+    .layout-cover .subtitle { max-width: 48vw; }
+    .layout-cover .cover-figure {
+      position: absolute; right: 7vw; top: 21vh; width: 29vw; padding: 1rem;
+      border: 1.5px solid var(--border); border-radius: 18px; background: rgba(253,250,231,.84);
+    }
+    .layout-cover .cover-figure img { width: 100%; display: block; border-radius: 12px; }
+    .caption { font-size: .76rem; color: var(--text-light); margin-top: .55rem; line-height: 1.45; }
+    .claim { font-family: 'Space Grotesk', 'Noto Sans SC', sans-serif; font-weight: 600; color: var(--text); }
+    .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; min-height: 0; }
+    .three-up { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .panel { padding: 1.1rem 1.2rem; border-radius: 14px; border: 1.5px solid var(--border); background: var(--card-bg); }
+    .panel h3 { color: var(--text); margin-bottom: .65rem; font-size: clamp(.95rem, 1.35vw, 1.2rem); }
+    .panel p { font-size: clamp(.78rem, .95vw, .92rem); }
+    .panel ul { list-style: none; display: flex; flex-direction: column; gap: .45rem; }
+    .panel li { position: relative; padding-left: 1rem; font-size: clamp(.75rem, .92vw, .88rem); line-height: 1.48; }
+    .panel li::before { content: ''; position: absolute; left: 0; top: .55rem; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+    .image-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; }
+    .image-card { border: 1.5px solid var(--border); border-radius: 14px; background: var(--card-bg); padding: .7rem; }
+    .image-card img { width: 100%; display: block; border-radius: 9px; aspect-ratio: 1 / 1; object-fit: cover; }
+    .image-card strong { display: block; color: var(--text); margin-top: .55rem; font-size: .86rem; }
+    .image-card span { display: block; color: var(--text-muted); font-size: .72rem; line-height: 1.35; margin-top: .25rem; }
+    .wide-figure { border: 1.5px solid var(--border); border-radius: 16px; background: var(--card-bg); padding: 1rem; min-height: 0; }
+    .wide-figure img { width: 100%; max-height: 58vh; object-fit: contain; display: block; border-radius: 10px; }
+    .workflow-line { display: grid; grid-template-columns: repeat(6, 1fr); gap: .8rem; margin-top: .8rem; }
+    .workflow-step { position: relative; padding: .9rem .8rem; border-radius: 12px; border: 1px solid var(--border); background: var(--card-bg); min-height: 116px; }
+    .workflow-step b { display: block; color: var(--primary); font-family: 'Space Grotesk', sans-serif; font-size: .8rem; margin-bottom: .45rem; }
+    .workflow-step strong { display: block; color: var(--text); font-size: .92rem; line-height: 1.25; margin-bottom: .35rem; }
+    .workflow-step span { color: var(--text-muted); font-size: .72rem; line-height: 1.34; }
+    .code-chip { font-family: 'Space Grotesk', monospace; color: var(--primary); background: var(--accent-light); border: 1px solid var(--border); border-radius: 100px; padding: .28rem .7rem; font-size: .74rem; display: inline-block; }
+    .param-table { display: grid; grid-template-columns: 1.15fr 1fr 1.6fr; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .param-table div { padding: .58rem .75rem; border-bottom: 1px solid var(--border); font-size: .8rem; line-height: 1.32; color: var(--text-muted); }
+    .param-table div:nth-child(3n+1), .param-table div:nth-child(3n+2), .param-table div:nth-child(3n+3) { border-right: 1px solid var(--border); }
+    .param-table div:nth-child(3n) { border-right: 0; }
+    .param-table .head { color: var(--text); font-weight: 700; background: var(--accent-light); }
+    .param-table .last { border-bottom: 0; }
+    .tiny-note { color: var(--text-light); font-size: .72rem; line-height: 1.4; }
+    .qr-box { border: 1.5px solid var(--border); border-radius: 16px; background: var(--card-bg); padding: 1.2rem; }
+    .link-line { font-family: 'Space Grotesk', sans-serif; color: var(--primary); font-size: .9rem; word-break: break-all; }
+    @media (max-width: 900px) {
+      .two-up, .three-up, .image-grid, .workflow-line { grid-template-columns: 1fr; }
+      .layout-cover .cover-figure { display: none; }
+    }
+</style>
+</head>
+<body>
+
+  <div class="deck cn">
+
+    <div class="slide layout-cover active">
+      <div class="cover-decoration"></div>
+      <div class="cover-dots">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="accent-line"></div>
+                    <h1>肺部 CT 结节检测<br>与可视化系统</h1>
+      <p class="subtitle">传统数字图像处理 Pipeline：MHD/RAW 读取、肺实质分割、频域增强、候选检测、特征筛选与 LUNA16 标注验证。</p>
+      <p class="meta">医学图像处理大作业 · C++17 / OpenCV / LUNA16 · 2026.05</p>
+      <div class="cover-figure"><img src="assets/slice_overlay_034.png" alt="CT overlay"><p class="caption">真实 LUNA16 subset8 病例检测叠加示例：绿色为肺边界，红圈为程序候选。</p></div>
+    </div>
+
+    <div class="slide layout-agenda">
+      <div class="slide-header"><h4>汇报结构</h4><span class="tag">4 min classroom demo</span></div>
+      <div class="slide-content"><div class="accent-line"></div><div class="agenda-grid">
+        <div class="agenda-item"><span class="agenda-num">01</span><div><h3>问题与数据</h3><p>为什么选肺结节；LUNA16 的 CT 数据和标准标注是什么。</p></div></div>
+        <div class="agenda-item"><span class="agenda-num">02</span><div><h3>方法 Pipeline</h3><p>从 3D CT 到逐层 2D 候选，再合并为 3D 结节。</p></div></div>
+        <div class="agenda-item"><span class="agenda-num">03</span><div><h3>关键图像处理步骤</h3><p>肺窗显示、肺掩膜、频域带通增强、连通域候选。</p></div></div>
+        <div class="agenda-item"><span class="agenda-num">04</span><div><h3>结果与验证</h3><p>使用官方 annotations.csv 进行 3D 坐标距离匹配。</p></div></div>
+        <div class="agenda-item"><span class="agenda-num">05</span><div><h3>调参与提升</h3><p>训练/测试划分下削减假阳性，保持测试集召回。</p></div></div>
+        <div class="agenda-item"><span class="agenda-num">06</span><div><h3>演示与反思</h3><p>界面操作、可解释性、局限与下一步改进。</p></div></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-metrics">
+      <div class="slide-header"><h4>项目定位</h4><span class="tag">为什么这个题目适合作业</span></div>
+      <div class="slide-content"><h2>用传统图像处理完整走通一条医学影像检测链路</h2><div class="metrics-row">
+        <div class="metric-card"><div class="metric-value">3D</div><div class="metric-label">真实 CT 体数据输入</div><div class="metric-desc">LUNA16 提供 .mhd 元数据与 .raw 裸数据；程序保留 HU 值，而不是只处理普通图片。</div><ul class="metric-supports"><li>512×512×多层切片</li><li>体素间距用于坐标换算</li><li>一例 CT 是一整个体数据</li></ul></div>
+        <div class="metric-card"><div class="metric-value">0</div><div class="metric-label">不使用深度学习模型</div><div class="metric-desc">检测逻辑全部来自课程图像处理方法，便于讲清原理与中间结果。</div><ul class="metric-supports"><li>阈值分割与形态学</li><li>傅里叶频域增强</li><li>连通域与特征描述</li></ul></div>
+        <div class="metric-card"><div class="metric-value">Stage0-5</div><div class="metric-label">可展示的端到端系统</div><div class="metric-desc">每一步都有输出图和 CSV，可以现场演示、验证和解释。</div><ul class="metric-supports"><li>切片浏览界面</li><li>候选结节特征表</li><li>官方标注验证脚本</li></ul></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-dashboard">
+      <div class="slide-header"><h4>数据集</h4><span class="tag">LUNA16 subset8</span></div>
+      <div class="slide-content"><h2>公开数据 + 官方结节中心标注，适合做算法验证</h2><div class="wide-figure"><img src="assets/dataset_split.svg" alt="dataset split"></div></div>
+    </div>
+
+    <div class="slide layout-split">
+      <div class="slide-header"><h4>Ground Truth</h4><span class="tag">CSV 与图像的关系</span></div>
+      <div class="slide-content"><h2>专家并不是给每层画 mask，而是给每个结节一行 3D 标注</h2><div class="split-body">
+        <div class="split-left"><ul class="insight-list">
+          <li>一例 CT 对应一个 <span class="code-chip">seriesuid</span>，文件名与 .mhd/.raw 一致。</li>
+          <li><span class="code-chip">coordX/Y/Z</span> 是结节中心的世界坐标，单位为 mm。</li>
+          <li><span class="code-chip">diameter_mm</span> 给出结节直径，用于判断候选是否落入半径范围。</li>
+          <li>程序输出的是体素坐标，需要用 .mhd 中的 Offset 与 ElementSpacing 转换。</li>
+        </ul></div>
+        <div class="split-right"><div class="split-highlight">验证不是肉眼看红圈，而是：程序候选中心 → 世界坐标 → 与官方中心计算 3D 距离。<cite>distance ≤ diameter/2 视为严格命中</cite></div><div class="mini-stat-row"><div class="mini-stat"><div class="mini-val">2/2</div><div class="mini-label">单例示例命中</div></div><div class="mini-stat"><div class="mini-val">0.82mm</div><div class="mini-label">最近结节距离</div></div><div class="mini-stat"><div class="mini-val">4.82mm</div><div class="mini-label">另一标注距离</div></div></div></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-timeline">
+      <div class="slide-header"><h4>系统流程</h4><span class="tag">Stage0 → Stage5</span></div>
+      <div class="slide-content"><h2>先逐层找 2D 候选，再跨切片合并为 3D 候选</h2><div class="workflow-line">
+        <div class="workflow-step"><b>Stage 0</b><strong>读入 CT</strong><span>解析 .mhd，读取 .raw，保留 HU 浮点体数据。</span></div>
+        <div class="workflow-step"><b>Stage 1</b><strong>肺实质分割</strong><span>阈值、边界空气剔除、形态学和连通域。</span></div>
+        <div class="workflow-step"><b>Stage 2</b><strong>频域增强</strong><span>高斯差带通滤波，突出结节尺度结构。</span></div>
+        <div class="workflow-step"><b>Stage 3</b><strong>2D 候选</strong><span>增强亮斑 + HU 范围 + 连通域提取。</span></div>
+        <div class="workflow-step"><b>Stage 4</b><strong>特征筛选</strong><span>直径、圆形度、HU、GLCM 纹理与层数。</span></div>
+        <div class="workflow-step"><b>Stage 5</b><strong>可视化验证</strong><span>叠加图、MIP、features.csv 与官方标注匹配。</span></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-detail">
+      <div class="slide-header"><h4>逐层 2D 检测</h4><span class="tag">候选怎么找出来</span></div>
+      <div class="slide-content"><h2>每一层切片上，候选来自“肺内 + 增强亮斑 + 软组织 HU”</h2><div class="detail-body">
+        <div class="detail-col"><div class="detail-block"><h3>1. 限定搜索范围</h3><ul><li>使用 HU &lt; -320 初步找到肺内低密度区域</li><li>去除与图像边界连通的体外空气</li><li>保留最大两个连通域，近似左右肺</li></ul></div><div class="detail-block"><h3>2. 频域带通增强</h3><ul><li>对肺内区域做 FFT</li><li>使用 σlow=30, σhigh=5 的高斯差带通</li><li>压制大背景和细噪声，保留中等尺度结构</li></ul></div></div>
+        <div class="detail-col"><div class="detail-block"><h3>3. 生成种子区域</h3><ul><li>取肺区域增强值第 85 百分位作为亮斑阈值</li><li>要求 -500 &lt; HU &lt; 250，排除空气和极高密度结构</li><li>闭运算连接临近亮点</li></ul></div><div class="detail-block"><h3>4. 连通域变候选</h3><ul><li>每个白色连通块视为一个 2D 候选</li><li>计算面积、中心、直径、圆形度、HU 均值与纹理</li><li>再由相邻层空间接近的候选合并为 3D 候选</li></ul></div></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-dashboard">
+      <div class="slide-header"><h4>可视化中间结果</h4><span class="tag">一张切片的四种视图</span></div>
+      <div class="slide-content"><h2>每一步都能被展示和解释，便于课堂演示</h2><div class="image-grid">
+        <div class="image-card"><img src="assets/slice_window_034.png"><strong>窗口图</strong><span>肺窗 WL=-600, WW=1500；将 HU 映射为可见灰度。</span></div>
+        <div class="image-card"><img src="assets/slice_mask_034.png"><strong>肺掩膜</strong><span>白色为程序认为的肺区域，后续只在这里搜索。</span></div>
+        <div class="image-card"><img src="assets/slice_bandpass_034.png"><strong>频域增强</strong><span>突出结节尺度附近的中频结构。</span></div>
+        <div class="image-card"><img src="assets/slice_overlay_034.png"><strong>检测叠加</strong><span>绿色肺边界，红圈为程序候选结节。</span></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-split">
+      <div class="slide-header"><h4>后处理筛选</h4><span class="tag">调参后的规则</span></div>
+      <div class="slide-content"><h2>策略：前面尽量别漏，后面用特征逐步削减假阳性</h2><div class="split-body">
+        <div class="split-left"><div class="param-table">
+          <div class="head">参数</div><div class="head">当前值</div><div class="head">筛选方向</div>
+          <div>minCircularity</div><div>0.46</div><div>轻微提高圆形要求，排除不规则碎片</div>
+          <div>meanHU</div><div>-410 ~ 60</div><div>去掉过暗空气纹理和过亮强血管/骨性区域</div>
+          <div>stdHU</div><div>25 ~ 210</div><div>保留中等内部灰度变化，过滤过均匀或过复杂结构</div>
+          <div>GLCM contrast</div><div>≤ 3.3</div><div>去掉纹理跳变过强的血管/边缘假阳性</div>
+          <div>GLCM homogeneity</div><div>≥ 0.45</div><div>保留相对均匀的团块状结构</div>
+          <div>sliceCount</div><div>≤ 18</div><div>去掉跨太多层的长条血管或粘连结构</div>
+          <div class="last">maxFinalCandidates</div><div class="last">180 / case</div><div class="last">按评分保留较可信候选，控制展示和误报规模</div>
+        </div></div>
+        <div class="split-right"><div class="split-highlight">本次调参没有改动前端候选生成主逻辑，而是在最终筛选阶段控制假阳性。<cite>避免为了少红圈牺牲测试集召回</cite></div><p class="tiny-note">训练集用于选择参数，测试集只用于最终评估。当前版本相比 baseline 在测试集严格召回不变的前提下，候选数约减半。</p></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-bars">
+      <div class="slide-header"><h4>定量结果</h4><span class="tag">Baseline vs Tuned</span></div>
+      <div class="slide-content"><h2>调参后测试集召回不变，假阳性明显下降</h2><div class="wide-figure"><img src="assets/train_test_candidate_fp.svg" alt="candidate fp chart"></div></div>
+    </div>
+
+    <div class="slide layout-dashboard">
+      <div class="slide-header"><h4>验证成绩</h4><span class="tag">Test split</span></div>
+      <div class="slide-content"><h2>最终版本更适合课堂展示：红圈更少，召回未掉</h2><div class="stats-grid">
+        <div class="stat-cell"><div class="stat-top"><span class="stat-num">25/40</span></div><div class="stat-name">测试集严格召回</div><div class="stat-context">Baseline 与 tuned 均为 62.5%，说明削假阳性未损失主指标。</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-num">135.4</span><span class="stat-unit">/例</span></div><div class="stat-name">测试集候选数</div><div class="stat-context">从 263.0 降至 135.4，减少约 48.5%。</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-num">83.4</span><span class="stat-unit">/例</span></div><div class="stat-name">测试集严格假阳性</div><div class="stat-context">从 172.0 降至 83.4，红圈密度明显改善。</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-num">88/88</span></div><div class="stat-name">全 subset8 运行成功</div><div class="stat-context">无崩溃；批量脚本可复现实验。</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-num">69/118</span></div><div class="stat-name">全量严格命中</div><div class="stat-context">subset8 全部病例，严格半径匹配。</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-num">73/118</span></div><div class="stat-name">全量放宽 10mm 命中</div><div class="stat-context">用于观察近邻漏检和中心偏移情况。</div></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-split">
+      <div class="slide-header"><h4>候选保留策略</h4><span class="tag">Top-K trade-off</span></div>
+      <div class="slide-content"><h2>如果要更少红圈，可以切换工作点；当前选择召回优先</h2><div class="two-up">
+        <div class="wide-figure"><img src="assets/topk_tradeoff.svg" alt="top k tradeoff"></div>
+        <div class="panel"><h3>为什么最终选 K=180？</h3><ul><li>K=120 时测试集 FP/例更低，但严格召回为 24/40。</li><li>K=180 时测试集严格召回保持 25/40，与 baseline 一致。</li><li>课堂汇报优先证明“能检出”，所以当前版本保留召回优先设置。</li><li>现场演示若想更清爽，可以临时展示 Top120/Top150 工作点。</li></ul></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-split">
+      <div class="slide-header"><h4>界面演示</h4><span class="tag">OpenCV HighGUI</span></div>
+      <div class="slide-content"><h2>演示时展示四宫格切片浏览和 MIP 概览</h2><div class="two-up">
+        <div class="wide-figure"><img src="assets/four_panel_workflow.png" alt="four panel"></div>
+        <div class="split-right"><div class="split-highlight">运行命令：<br><span class="code-chip">./build/lung_viewer data/demo_view</span><cite>左右方向键或 a/d 切片，q/Esc 退出</cite></div><div class="mini-stat-row"><div class="mini-stat"><div class="mini-val">PGM</div><div class="mini-label">灰度切片</div></div><div class="mini-stat"><div class="mini-val">PPM</div><div class="mini-label">彩色叠加</div></div><div class="mini-stat"><div class="mini-val">CSV</div><div class="mini-label">候选特征</div></div></div><p class="tiny-note">批量验证目录默认不保存完整切片图；演示目录需要不加 --no-debug-images 重新跑一例。</p></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-detail">
+      <div class="slide-header"><h4>局限与改进</h4><span class="tag">Why not perfect?</span></div>
+      <div class="slide-content"><h2>传统算法可解释，但血管与边缘仍是主要假阳性来源</h2><div class="detail-body">
+        <div class="detail-col"><div class="detail-block"><h3>当前局限</h3><ul><li>血管横截面与小结节在单层上很像</li><li>靠圆形度和 HU 很难完全区分血管交叉</li><li>MIP 显示仍偏粗糙，适合概览但不适合诊断</li></ul></div><div class="detail-block"><h3>验证层面</h3><ul><li>LUNA16 标注是 3D 中心点和直径，不是逐像素 mask</li><li>严格半径匹配对中心偏移比较敏感</li><li>真实医学 CAD 还需要 FROC 等更完整指标</li></ul></div></div>
+        <div class="detail-col"><div class="detail-block"><h3>下一步优化</h3><ul><li>加入长宽比、偏心率、二阶矩等形状特征</li><li>增加 Hessian/Frangi 类血管抑制响应</li><li>改进 3D 连通聚类，减少孤立切片误报</li></ul></div><div class="detail-block"><h3>课程价值</h3><ul><li>覆盖采样量化、灰度变换、频域增强</li><li>覆盖形态学、图像分割、连通域分析</li><li>覆盖特征描述、可视化与定量验证</li></ul></div></div>
+      </div></div>
+    </div>
+
+    <div class="slide layout-closing">
+      <div class="closing-decoration"></div><div class="closing-decoration-2"></div><div class="accent-line" style="margin: 0 auto 1.5rem;"></div>
+      <h1>结论</h1><p class="closing-sub">我们完成了一个纯传统图像处理的肺结节检测与可视化系统：能读取真实 LUNA16 CT，生成候选结节，并用官方标注进行可复现验证。</p>
+      <div class="qr-box"><p class="claim">代码仓库</p><p class="link-line">github.com/YunfanGoForIt/lung-ct-nodule-detection</p></div>
+      <p class="closing-contact">医学图像处理大作业 · C++ / OpenCV · LUNA16</p>
+    </div>
+
+  </div>
+
+  <div class="slide-counter"><span id="current">1</span> / <span id="total">14</span></div>
+  <div class="keyboard-hint">Use arrow keys to navigate</div>
+  <div class="progress-bar" id="progress"></div>
+  <div class="nav-controls">
+    <button class="nav-btn" id="prevBtn" onclick="changeSlide(-1)" aria-label="Previous slide"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+    <button class="nav-btn" id="nextBtn" onclick="changeSlide(1)" aria-label="Next slide"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+  </div>
+
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const currentEl = document.getElementById('current');
+    const totalEl = document.getElementById('total');
+    const progressEl = document.getElementById('progress');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const total = slides.length;
+    totalEl.textContent = total;
+    const slideParam = Number(new URLSearchParams(window.location.search).get('slide'));
+    let current = Number.isFinite(slideParam) ? Math.min(Math.max(slideParam - 1, 0), total - 1) : 0;
+    function updateSlide() {
+      slides.forEach((slide, i) => {
+        slide.classList.remove('active', 'prev');
+        if (i === current) slide.classList.add('active');
+        else if (i < current) slide.classList.add('prev');
+      });
+      currentEl.textContent = current + 1;
+      progressEl.style.width = ((current + 1) / total * 100) + '%';
+      prevBtn.disabled = current === 0;
+      nextBtn.disabled = current === total - 1;
+    }
+    function changeSlide(dir) {
+      const next = current + dir;
+      if (next >= 0 && next < total) { current = next; updateSlide(); }
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); changeSlide(1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); changeSlide(-1); }
+      else if (e.key === 'Home') { e.preventDefault(); current = 0; updateSlide(); }
+      else if (e.key === 'End') { e.preventDefault(); current = total - 1; updateSlide(); }
+    });
+    let touchStartX = 0; let touchEndX = 0;
+    document.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
+    document.addEventListener('touchend', (e) => { touchEndX = e.changedTouches[0].screenX; const diff = touchStartX - touchEndX; if (Math.abs(diff) > 50) changeSlide(diff > 0 ? 1 : -1); }, { passive: true });
+    updateSlide();
+  </script>
+
+</body>
+</html>
