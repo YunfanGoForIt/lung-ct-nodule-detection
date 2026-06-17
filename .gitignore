@@ -3,6 +3,9 @@
 build/
 build-cmake/
 data/
+outputs/
+presentation.zip
+presentation/lung_ct_class_report/pptx_output/
 __pycache__/
 *.pyc
 node_modules/
