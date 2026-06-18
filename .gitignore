@@ -1,11 +1,42 @@
-*.pdf
 .DS_Store
+
+# Generated PDFs are ignored by default. Keep the final course report as a deliverable.
+*.pdf
+!report/肺部CT结节检测与可视化系统课程大作业报告.pdf
+
+# Build and dependency directories
 build/
 build-cmake/
 data/
+node_modules/
+
+# Runtime outputs and generated experiment artifacts
 outputs/
+output/
+demo_real_case/
+demo_real_case_ui/
+demo_teacher_case_ui/
+tmp/
+.skill-build/
 presentation.zip
 presentation/lung_ct_class_report/pptx_output/
+
+# LaTeX intermediate files
+report/*.aux
+report/*.fdb_latexmk
+report/*.fls
+report/*.log
+report/*.out
+report/*.toc
+report/*.xdv
+report/main.pdf
+
+# Temporary office lock files
+~$*
+
+# Local helper scripts generated for report handouts
+scripts/generate_speaker_cards.py
+scripts/generate_full_speaker_cards.py
+
 __pycache__/
 *.pyc
-node_modules/
